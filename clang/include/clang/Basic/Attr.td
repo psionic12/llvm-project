@@ -3444,3 +3444,24 @@ def ReleaseHandle : InheritableParamAttr {
   let Subjects = SubjectList<[ParmVar]>;
   let Documentation = [ReleaseHandleDocs];
 }
+
+def MECategory : InheritableParamAttr {
+  let Spellings = [CXX11<"me", "category">, C2x<"me", "category">];
+  let Args = [VariadicStringArgument<"Categories">];
+  let Subjects = SubjectList<[Field]>;
+  let Documentation = [Undocumented];
+}
+
+def MEItem : InheritableParamAttr {
+  let Spellings = [CXX11<"me", "type">, C2x<"me", "type">];
+  let Args = [StringArgument<"Type", 1>, StringArgument<"Getter", 1>, StringArgument<"Setter", 1>];
+  let Subjects = SubjectList<[Field]>;
+  let Documentation = [Undocumented];
+}
+
+def MEList : InheritableParamAttr {
+  let Spellings = [CXX11<"me", "list">, C2x<"me", "list">];
+  let Args = [StringArgument<"ElementType">, StringArgument<"Iterator">, StringArgument<"Emplacer">];
+  let Subjects = SubjectList<[Field]>;
+  let Documentation = [Undocumented];
+}

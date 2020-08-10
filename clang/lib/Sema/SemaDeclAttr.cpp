@@ -6788,6 +6788,61 @@ static void handleCFGuardAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
   D->addAttr(::new (S.Context) CFGuardAttr(S.Context, AL, Arg));
 }
 
+static void handleMECategoryAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
+  SmallVector<StringRef, 4> Categories;
+  for (unsigned I = 0, E = AL.getNumArgs(); I != E; ++I) {
+    StringRef Category;
+    if (!S.checkStringLiteralArgumentAttr(AL, I, Category))
+      return;
+    Categories.push_back(Category);
+  }
+  if (!checkAttributeAtLeastNumArgs(S, AL, 1))
+    return;
+  llvm::sort(Categories);
+  Categories.erase(std::unique(Categories.begin(), Categories.end()),
+                   Categories.end());
+  D->addAttr(::new (S.Context) MECategoryAttr(S.Context, AL, Categories.data(),
+                                              Categories.size()));
+}
+
+static void handleMEItemAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
+  if (!checkAttributeAtLeastNumArgs(S, AL, 1))
+    return;
+  assert(checkAttributeAtMostNumArgs(S, AL, 3) &&
+         "Invalid number of arguments in an item attribute");
+
+  StringRef Type;
+  if (const auto *SE = dyn_cast_or_null<StringLiteral>(AL.getArgAsExpr(0)))
+    Type = SE->getString();
+
+  StringRef Getter;
+  if (const auto *SE = dyn_cast_or_null<StringLiteral>(AL.getArgAsExpr(1)))
+    Getter = SE->getString();
+
+  StringRef Setter;
+  if (const auto *SE = dyn_cast_or_null<StringLiteral>(AL.getArgAsExpr(2)))
+    Setter = SE->getString();
+
+  D->addAttr(::new (S.Context) MEItemAttr(S.Context, AL, Type, Getter, Setter));
+}
+
+static void handleMEListAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
+  assert(checkAttributeNumArgs(S, AL, 3) &&
+         "Invalid number of arguments in an list attribute");
+
+  StringRef ElementType;
+  S.checkStringLiteralArgumentAttr(AL, 0, ElementType);
+
+  StringRef Iterator;
+  S.checkStringLiteralArgumentAttr(AL, 1, Iterator);
+
+  StringRef Emplacer;
+  S.checkStringLiteralArgumentAttr(AL, 2, Emplacer);
+
+  D->addAttr(::new (S.Context)
+                 MEListAttr(S.Context, AL, ElementType, Iterator, Emplacer));
+}
+
 //===----------------------------------------------------------------------===//
 // Top Level Sema Entry Points
 //===----------------------------------------------------------------------===//
@@ -7445,6 +7500,18 @@ static void ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D,
 
   case ParsedAttr::AT_UseHandle:
     handleHandleAttr<UseHandleAttr>(S, D, AL);
+    break;
+
+  case ParsedAttr::AT_MECategory:
+    handleMECategoryAttr(S, D, AL);
+    break;
+
+  case ParsedAttr::AT_MEItem:
+    handleMEItemAttr(S, D, AL);
+    break;
+
+  case ParsedAttr::AT_MEList:
+    handleMEListAttr(S, D, AL);
     break;
   }
 }
