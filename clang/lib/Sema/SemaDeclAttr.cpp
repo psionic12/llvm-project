@@ -6805,25 +6805,15 @@ static void handleMECategoryAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
                                               Categories.size()));
 }
 
-static void handleMEItemAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
-  if (!checkAttributeAtLeastNumArgs(S, AL, 1))
+static void handleMEAliasAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
+  if (!checkAttributeNumArgs(S, AL, 1))
     return;
-  assert(checkAttributeAtMostNumArgs(S, AL, 3) &&
-         "Invalid number of arguments in an item attribute");
 
   StringRef Type;
   if (const auto *SE = dyn_cast_or_null<StringLiteral>(AL.getArgAsExpr(0)))
     Type = SE->getString();
 
-  StringRef Getter;
-  if (const auto *SE = dyn_cast_or_null<StringLiteral>(AL.getArgAsExpr(1)))
-    Getter = SE->getString();
-
-  StringRef Setter;
-  if (const auto *SE = dyn_cast_or_null<StringLiteral>(AL.getArgAsExpr(2)))
-    Setter = SE->getString();
-
-  D->addAttr(::new (S.Context) MEItemAttr(S.Context, AL, Type, Getter, Setter));
+  D->addAttr(::new (S.Context) MEAliasAttr(S.Context, AL, Type));
 }
 
 static void handleMEListAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
@@ -7506,8 +7496,8 @@ static void ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D,
     handleMECategoryAttr(S, D, AL);
     break;
 
-  case ParsedAttr::AT_MEItem:
-    handleMEItemAttr(S, D, AL);
+  case ParsedAttr::AT_MEAlias:
+    handleMEAliasAttr(S, D, AL);
     break;
 
   case ParsedAttr::AT_MEList:

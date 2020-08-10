@@ -3452,9 +3452,9 @@ def MECategory : InheritableParamAttr {
   let Documentation = [Undocumented];
 }
 
-def MEItem : InheritableParamAttr {
-  let Spellings = [CXX11<"me", "type">, C2x<"me", "type">];
-  let Args = [StringArgument<"Type", 1>, StringArgument<"Getter", 1>, StringArgument<"Setter", 1>];
+def MEAlias : InheritableParamAttr {
+  let Spellings = [CXX11<"me", "alias">, C2x<"me", "alias">];
+  let Args = [StringArgument<"Type">];
   let Subjects = SubjectList<[Field]>;
   let Documentation = [Undocumented];
 }

@@ -1,0 +1,7 @@
+[
+  {
+    "directory": "C:/Users/derwe/Documents/GitHub//llvm-project/clang/tools/me-serialization/example",
+    "command": "C:\\PROGRA~2\\MICROS~2\\2019\\BUILDT~1\\VC\\Tools\\MSVC\\1426~1.288\\bin\\Hostx86\\x64\\cl.exe  /nologo /TP -DGLFW_DLL C:/Users/derwe/Documents/GitHub//llvm-project/clang/tools/me-serialization/example  /DWIN32 /D_WINDOWS /W3 /GR /EHsc /MDd /Zi /Ob0 /Od /RTC1   -std:c++17 /Foengine\\CMakeFiles\\engine.dir\\component\\transform.cpp.obj /FdTARGET_COMPILE_PDB /FS -c C:/Users/derwe/Documents/GitHub//llvm-project/clang/tools/me-serialization/example/main.cpp",
+    "file": "C:/Users/derwe/Documents/GitHub//llvm-project/clang/tools/me-serialization/example/main.cpp"
+  }
+]
