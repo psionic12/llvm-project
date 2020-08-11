@@ -4,10 +4,10 @@
 #include <vector>
 class A {
 private:
-  [[me::category(PREFAB)]][[me::alias("int")]]
+  [[me::category(PREFAB)]][[me::alias("int64")]]
   int i = 0;
 
-  [[me::category(PREFAB, SAVING)]] [[me::list("int", "xxx", "yyy")]]
+  [[me::category(PREFAB, SAVE)]] [[me::list("int64", "xxx", "yyy")]]
   std::vector<int> v;
 };
 #endif // LLVM_CLANG_TOOLS_ME_SERIALIZATION_EXAMPLE_EXAMPLE_1_H_

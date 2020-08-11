@@ -3454,14 +3454,15 @@ def MECategory : InheritableParamAttr {
 
 def MEAlias : InheritableParamAttr {
   let Spellings = [CXX11<"me", "alias">, C2x<"me", "alias">];
-  let Args = [StringArgument<"Type">];
+  let Args = [StringArgument<"AliasType">];
   let Subjects = SubjectList<[Field]>;
   let Documentation = [Undocumented];
 }
 
 def MEList : InheritableParamAttr {
   let Spellings = [CXX11<"me", "list">, C2x<"me", "list">];
-  let Args = [StringArgument<"ElementType">, StringArgument<"Iterator">, StringArgument<"Emplacer">];
+  let Args = [StringArgument<"AliasElementType">, StringArgument<"OriginalType", 1>,
+                StringArgument<"ListIterator", 1>, StringArgument<"ListEmplacer", 1>];
   let Subjects = SubjectList<[Field]>;
   let Documentation = [Undocumented];
 }
