@@ -4474,7 +4474,7 @@ static void handleSuppressAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
                               DiagnosticIdentifiers.size()));
 }
 
-static void handleLifetimeCategoryAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
+static void handleLifetiMESerializedAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
   TypeSourceInfo *DerefTypeLoc = nullptr;
   QualType ParmType;
   if (AL.hasParsedType()) {
@@ -6772,7 +6772,7 @@ static void handleCFGuardAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
   D->addAttr(::new (S.Context) CFGuardAttr(S.Context, AL, Arg));
 }
 
-static void handleMECategoryAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
+static void handleMESerializedAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
   SmallVector<StringRef, 4> Categories;
   for (unsigned I = 0, E = AL.getNumArgs(); I != E; ++I) {
     StringRef Category;
@@ -6780,12 +6780,10 @@ static void handleMECategoryAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
       return;
     Categories.push_back(Category);
   }
-  if (!checkAttributeAtLeastNumArgs(S, AL, 1))
-    return;
   llvm::sort(Categories);
   Categories.erase(std::unique(Categories.begin(), Categories.end()),
                    Categories.end());
-  D->addAttr(::new (S.Context) MECategoryAttr(S.Context, AL, Categories.data(),
+  D->addAttr(::new (S.Context) MESerializedAttr(S.Context, AL, Categories.data(),
                                               Categories.size()));
 }
 
@@ -7302,7 +7300,7 @@ static void ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D,
     break;
   case ParsedAttr::AT_Owner:
   case ParsedAttr::AT_Pointer:
-    handleLifetimeCategoryAttr(S, D, AL);
+    handleLifetiMESerializedAttr(S, D, AL);
     break;
   case ParsedAttr::AT_OpenCLAccess:
     handleOpenCLAccessAttr(S, D, AL);
@@ -7485,8 +7483,8 @@ static void ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D,
     handleHandleAttr<UseHandleAttr>(S, D, AL);
     break;
 
-  case ParsedAttr::AT_MECategory:
-    handleMECategoryAttr(S, D, AL);
+  case ParsedAttr::AT_MESerialized:
+    handleMESerializedAttr(S, D, AL);
     break;
 
   case ParsedAttr::AT_MEAlias:

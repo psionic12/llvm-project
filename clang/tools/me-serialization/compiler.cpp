@@ -9,7 +9,6 @@
 #include <google/protobuf/text_format.h>
 #include <llvm/Support/CommandLine.h>
 
-#include "me_attributes.h"
 #include "record_info.pb.h"
 
 llvm::cl::OptionCategory serializable_category("serialization options");
@@ -31,8 +30,8 @@ clang::ast_matchers::DeclarationMatcher record_matcher =
         .bind("Record");
 
 const std::unordered_map<std::string, Category> category_map{
-    {PREFAB, Category::Prefab},
-    {SAVE, Category::Save},
+    {"prefab", Category::Prefab},
+    {"save", Category::Save},
 };
 
 const std::unordered_map<std::string, ProtoKind> str_to_kind_map{
@@ -53,7 +52,7 @@ const std::unordered_map<std::string, ProtoKind> str_to_kind_map{
     {"sint64", ProtoKind::TypeSint64},
 };
 
-void TerminateIf(bool condition, const char *err, const clang::Decl* decl) {
+void TerminateIf(bool condition, const char *err, const clang::Decl *decl) {
   if (condition) {
     const auto &source_manager = decl->getASTContext().getSourceManager();
     decl->getLocation().dump(source_manager);
@@ -62,24 +61,11 @@ void TerminateIf(bool condition, const char *err, const clang::Decl* decl) {
   }
 }
 
-
-ProtoKind StringToKind(const std::string &str, const clang::Decl* decl) {
+ProtoKind StringToKind(const std::string &str, const clang::Decl *decl) {
   const auto &it = str_to_kind_map.find(str);
-  TerminateIf(it == str_to_kind_map.end(), (std::string("alias type unknown: ") + str).c_str() , decl);
+  TerminateIf(it == str_to_kind_map.end(),
+              (std::string("alias type unknown: ") + str).c_str(), decl);
   return it->second;
-}
-
-bool IsSerializedField(const clang::FieldDecl *field) {
-  if (auto *category_attr = field->getAttr<clang::MECategoryAttr>()) {
-    for (const auto &category : category_attr->categories()) {
-      if (category == PREFAB || category == SAVE) {
-        return true;
-      } else {
-        return false;
-      }
-    }
-  }
-  return false;
 }
 
 std::string GetFullName(const clang::CXXRecordDecl *record) {
@@ -113,6 +99,13 @@ void CheckField(const clang::FieldDecl *field) {
               "serialized type cannot be a pointer or reference", field);
 }
 
+void CheckMethod(const clang::CXXMethodDecl *method) {
+  TerminateIf(!method->getDeclaredReturnType()->isReferenceType(),
+              "getter must return reference type", method);
+  TerminateIf(method->param_size() > 0, "getter cannot have parameters",
+              method);
+}
+
 ProtoKind GetProtoKind(const clang::BuiltinType *builtin_type) {
   switch (builtin_type->getKind()) {
   case clang::BuiltinType::Kind::Bool: {
@@ -136,6 +129,66 @@ ProtoKind GetProtoKind(const clang::BuiltinType *builtin_type) {
   }
 }
 
+const clang::Type *GetFieldType(const clang::CXXMethodDecl *method_decl) {
+  return method_decl->getDeclaredReturnType().getTypePtr();
+}
+
+const clang::Type *GetFieldType(const clang::FieldDecl *field_decl) {
+  return field_decl->getType().getTypePtr();
+}
+
+void HandleField(const clang::ValueDecl *decl, ProtoFileInfo &proto_file_info,
+                 clang::MESerializedAttr *serialized_attr,
+                 const clang::Type *field_type) {
+  // create a field
+  auto *proto_field = proto_file_info.add_fields();
+  proto_field->set_name(decl->getNameAsString());
+
+  // add all categories
+  for (const auto &category_str_ref : serialized_attr->categories()) {
+    const auto &category = category_map.find(category_str_ref.str());
+    if (category != category_map.end()) {
+      proto_field->add_categories(category->second);
+    }
+  }
+
+  auto *alias_attr = decl->getAttr<clang::MEAliasAttr>();
+  auto *list_attr = decl->getAttr<clang::MEListAttr>();
+  TerminateIf((alias_attr && list_attr),
+              "cannot mark a field both as alias and as list", decl);
+  std::string field_type_name;
+  if (auto *r = decl->getType().getTypePtr()->getAsCXXRecordDecl()) {
+    field_type_name = GetFullName(r);
+  } else {
+    field_type_name = decl->getType().getAsString();
+  }
+
+  // check if the field is an alias
+  if (alias_attr) {
+    auto *alias_field = proto_field->mutable_alias_field();
+    const auto &alias_type_name = alias_attr->getAliasType().str();
+    alias_field->set_alias_kind(StringToKind(alias_type_name, decl));
+    alias_field->set_original_type_name(field_type_name);
+  }
+  // check if the field is a list
+  else if (list_attr) {
+    auto *list_field = proto_field->mutable_list_field();
+    const auto &alias_type_name = list_attr->getAliasElementType().str();
+    list_field->set_alias_kind(StringToKind(alias_type_name, decl));
+    list_field->set_original_type_name(field_type_name);
+    list_field->set_iterator(list_attr->getListIterator().str());
+    list_field->set_emplacer(list_attr->getListEmplacer().str());
+  }
+  // check if the field is a built-in type
+  else if (const auto *built_in = field_type->getAs<clang::BuiltinType>()) {
+    auto *basic_field = proto_field->mutable_basic_field();
+    basic_field->set_kind(GetProtoKind(built_in));
+  } else {
+    std::cerr << "unknown field type, do you forget to add attribute?"
+              << std::endl;
+  }
+}
+
 bool ParseRecordDetails(const clang::CXXRecordDecl *record,
                         ProtoFileInfo &proto_file_info) {
   // parse parents
@@ -149,58 +202,19 @@ bool ParseRecordDetails(const clang::CXXRecordDecl *record,
 
   // parse fields
   for (auto *field : record->fields()) {
-    CheckField(field);
-    if (auto *category_attr = field->getAttr<clang::MECategoryAttr>()) {
+    if (auto *serialized_attr = field->getAttr<clang::MESerializedAttr>()) {
+      CheckField(field);
       has_serializable_field |= true;
+      HandleField(field, proto_file_info, serialized_attr, GetFieldType(field));
+    }
+  }
 
-      // create a field
-      auto *proto_field = proto_file_info.add_fields();
-      proto_field->set_name(field->getNameAsString());
-
-      // add all categories
-      for (const auto &category_str_ref : category_attr->categories()) {
-        const auto &category = category_map.find(category_str_ref.str());
-        if (category != category_map.end()) {
-          proto_field->add_categories(category->second);
-        }
-      }
-
-      auto *alias_attr = field->getAttr<clang::MEAliasAttr>();
-      auto *list_attr = field->getAttr<clang::MEListAttr>();
-      TerminateIf((alias_attr && list_attr),
-                  "cannot mark a field both as alias and as list", field);
-      std::string field_type_name;
-      if(auto* r = field->getType().getTypePtr()->getAsCXXRecordDecl()) {
-        field_type_name = GetFullName(r);
-      } else {
-        field_type_name = field->getType().getAsString();
-      }
-
-      // check if the field is an alias
-      if (alias_attr) {
-        auto *alias_field = proto_field->mutable_alias_field();
-        const auto &alias_type_name = alias_attr->getAliasType().str();
-        alias_field->set_alias_kind(StringToKind(alias_type_name, field));
-        alias_field->set_original_type_name(field_type_name);
-      }
-      // check if the field is a list
-      else if (list_attr) {
-        auto *list_field = proto_field->mutable_list_field();
-        const auto &alias_type_name = list_attr->getAliasElementType().str();
-        list_field->set_alias_kind(StringToKind(alias_type_name, field));
-        list_field->set_original_type_name(field_type_name);
-        list_field->set_iterator(list_attr->getListIterator().str());
-        list_field->set_emplacer(list_attr->getListEmplacer().str());
-      }
-      // check if the field is a built-in type
-      else if (const auto *built_in =
-                   field->getType().getTypePtr()->getAs<clang::BuiltinType>()) {
-        auto *basic_field = proto_field->mutable_basic_field();
-        basic_field->set_kind(GetProtoKind(built_in));
-      } else {
-        std::cerr << "unknown field type, do you forget to add attribute?"
-                  << std::endl;
-      }
+  // parse alias getters
+  for (auto *method : record->methods()) {
+    if (auto *serialized_attr = method->getAttr<clang::MESerializedAttr>()) {
+      CheckMethod(method);
+      HandleField(method, proto_file_info, serialized_attr,
+                  GetFieldType(method));
     }
   }
   return has_serializable_field;
@@ -238,7 +252,7 @@ public:
     if (const auto *record =
             Result.Nodes.getNodeAs<clang::CXXRecordDecl>("Record")) {
       for (auto *field : record->fields()) {
-        if (IsSerializedField(field)) {
+        if (field->getAttr<clang::MESerializedAttr>() != nullptr) {
           HandleRecord(record);
           break;
         }

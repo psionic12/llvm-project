@@ -3445,17 +3445,17 @@ def ReleaseHandle : InheritableParamAttr {
   let Documentation = [ReleaseHandleDocs];
 }
 
-def MECategory : InheritableParamAttr {
-  let Spellings = [CXX11<"me", "category">, C2x<"me", "category">];
+def MESerialized : InheritableParamAttr {
+  let Spellings = [CXX11<"me", "serialized">, C2x<"me", "serialized">];
   let Args = [VariadicStringArgument<"Categories">];
-  let Subjects = SubjectList<[Field]>;
+  let Subjects = SubjectList<[Field, CXXMethod]>;
   let Documentation = [Undocumented];
 }
 
 def MEAlias : InheritableParamAttr {
   let Spellings = [CXX11<"me", "alias">, C2x<"me", "alias">];
   let Args = [StringArgument<"AliasType">];
-  let Subjects = SubjectList<[Field]>;
+  let Subjects = SubjectList<[Field, CXXMethod]>;
   let Documentation = [Undocumented];
 }
 
@@ -3463,6 +3463,6 @@ def MEList : InheritableParamAttr {
   let Spellings = [CXX11<"me", "list">, C2x<"me", "list">];
   let Args = [StringArgument<"AliasElementType">, StringArgument<"OriginalType", 1>,
                 StringArgument<"ListIterator", 1>, StringArgument<"ListEmplacer", 1>];
-  let Subjects = SubjectList<[Field]>;
+  let Subjects = SubjectList<[Field, CXXMethod]>;
   let Documentation = [Undocumented];
 }

@@ -1,7 +1,0 @@
-[
-  {
-    "directory": "/home/liu/source/llvm-project/clang/tools/me-serialization/example",
-    "command": "clang++ -g -std=c++11 -I/home/liu/source/llvm-project/clang/tools/me-serialization/example /home/liu/source/llvm-project/clang/tools/me-serialization/example/main.cpp",
-    "file": "/home/liu/source/llvm-project/clang/tools/me-serialization/example/main.cpp"
-  }
-]
