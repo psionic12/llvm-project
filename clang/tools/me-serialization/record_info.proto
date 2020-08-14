@@ -18,9 +18,9 @@ enum ProtoKind {
   TypeSint64 = 14;
 }
 
-enum Category {
-  Prefab = 0;
-  Save = 1;
+// used to save different kinds of namespace + class name (such as A.B.C and A::B::C)
+message FullName {
+  repeated string strings = 1;
 }
 
 message BasicField {
@@ -28,20 +28,20 @@ message BasicField {
 }
 
 message AliasField {
-  string original_type_name = 1;
+  FullName original_type_name = 1;
   ProtoKind alias_kind = 2;
 }
 
 message ListField {
   ProtoKind alias_kind = 1;
-  string original_type_name = 2;
+  FullName original_type_name = 2;
   string iterator = 3;
   string emplacer = 4;
 }
 
 message Field {
   string name = 1;
-  repeated Category categories = 2;
+  repeated string categories = 2;
   oneof value {
     BasicField basic_field = 3;
     AliasField alias_field = 4;
@@ -50,7 +50,7 @@ message Field {
 }
 
 message ProtoFileInfo {
-  string full_class_name = 1;
+  FullName full_class_name = 1;
   repeated Field fields = 2;
-  repeated string ancestors = 3;
+  repeated FullName ancestors = 3;
 }

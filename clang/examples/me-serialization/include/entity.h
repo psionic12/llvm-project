@@ -6,7 +6,7 @@
 namespace me {
 class Entity {
 private:
-  [[me::serialized("prefab")]][[me::list("string", "begin", "emplace_back")]]
+  [[me::serialized("prefab")]][[me::list("string", "component::Component", "begin", "emplace_back")]]
   std::vector<component::Component> components_;
 };
 }//namespace me

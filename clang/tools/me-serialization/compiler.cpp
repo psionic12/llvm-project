@@ -29,10 +29,7 @@ clang::ast_matchers::DeclarationMatcher record_matcher =
     clang::ast_matchers::cxxRecordDecl(clang::ast_matchers::hasDefinition())
         .bind("Record");
 
-const std::unordered_map<std::string, Category> category_map{
-    {"prefab", Category::Prefab},
-    {"save", Category::Save},
-};
+const clang::ASTContext *ast_context = nullptr;
 
 const std::unordered_map<std::string, ProtoKind> str_to_kind_map{
     {"double", ProtoKind::TypeDouble},
@@ -68,18 +65,44 @@ ProtoKind StringToKind(const std::string &str, const clang::Decl *decl) {
   return it->second;
 }
 
-std::string GetFullName(const clang::CXXRecordDecl *record) {
-  std::string nd_str;
-  for (const clang::DeclContext *dc = record->getParent(); dc;
-       dc = dc->getParent()) {
-    if (const auto *nd = llvm::dyn_cast<clang::NamespaceDecl>(dc)) {
-      nd_str += nd->getNameAsString();
-      nd_str += "_";
-    } else {
-      break;
+void GetFullName(const clang::Type *type, FullName *full_name,
+                 const clang::PrintingPolicy &policy) {
+  // inner lambda to get namespace
+  std::function<void(const clang::NamespaceDecl *)> GetNameSpace =
+      [&GetNameSpace, &full_name](const clang::NamespaceDecl *decl) {
+        if (const auto *parent = llvm::dyn_cast_or_null<clang::NamespaceDecl>(
+                decl->getParent())) {
+          GetNameSpace(parent);
+        }
+        full_name->add_strings(decl->getNameAsString());
+      };
+
+  // if the type has a RecordDecl to refer to
+  if (const auto *decl = type->getAsCXXRecordDecl()) {
+    // if the decl has parent and the parent is a namespace decl
+    if (const auto *namespace_decl =
+            llvm::dyn_cast_or_null<clang::NamespaceDecl>(decl->getParent())) {
+      // recursive to get the namespace name
+      GetNameSpace(namespace_decl);
     }
+    // the type name is the record name
+    full_name->add_strings(decl->getNameAsString());
+  } else if (const auto *built_in_type = type->getAs<clang::BuiltinType>()) {
+    full_name->add_strings(built_in_type->getNameAsCString(policy));
   }
-  return nd_str += record->getNameAsString();
+}
+
+std::string FullNameAsString(const FullName &full_name,
+                             const std::string &replacement) {
+  std::string s;
+  auto iterator = full_name.strings().begin();
+  while (iterator != full_name.strings().end() - 1) {
+    s += *iterator;
+    s += replacement;
+    iterator++;
+  }
+  s += *iterator;
+  return s;
 }
 
 void CheckRecord(const clang::CXXRecordDecl *record) {
@@ -97,13 +120,6 @@ void CheckField(const clang::FieldDecl *field) {
               field);
   TerminateIf((type->isPointerType() || type->isReferenceType()),
               "serialized type cannot be a pointer or reference", field);
-}
-
-void CheckMethod(const clang::CXXMethodDecl *method) {
-  TerminateIf(!method->getDeclaredReturnType()->isReferenceType(),
-              "getter must return reference type", method);
-  TerminateIf(method->param_size() > 0, "getter cannot have parameters",
-              method);
 }
 
 ProtoKind GetProtoKind(const clang::BuiltinType *builtin_type) {
@@ -130,14 +146,20 @@ ProtoKind GetProtoKind(const clang::BuiltinType *builtin_type) {
 }
 
 const clang::Type *GetFieldType(const clang::CXXMethodDecl *method_decl) {
-  return method_decl->getDeclaredReturnType().getTypePtr();
+
+  TerminateIf(method_decl->param_size() > 0, "getter cannot have parameters",
+              method_decl);
+  auto *type =
+      method_decl->getDeclaredReturnType()->getAs<clang::LValueReferenceType>();
+  TerminateIf(!type, "getter must return reference type", method_decl);
+  return type->getPointeeType().getTypePtr();
 }
 
 const clang::Type *GetFieldType(const clang::FieldDecl *field_decl) {
   return field_decl->getType().getTypePtr();
 }
 
-void HandleField(const clang::ValueDecl *decl, ProtoFileInfo &proto_file_info,
+void HandleField(const clang::NamedDecl *decl, ProtoFileInfo &proto_file_info,
                  clang::MESerializedAttr *serialized_attr,
                  const clang::Type *field_type) {
   // create a field
@@ -146,36 +168,31 @@ void HandleField(const clang::ValueDecl *decl, ProtoFileInfo &proto_file_info,
 
   // add all categories
   for (const auto &category_str_ref : serialized_attr->categories()) {
-    const auto &category = category_map.find(category_str_ref.str());
-    if (category != category_map.end()) {
-      proto_field->add_categories(category->second);
-    }
+    proto_field->add_categories(category_str_ref.str());
   }
 
   auto *alias_attr = decl->getAttr<clang::MEAliasAttr>();
   auto *list_attr = decl->getAttr<clang::MEListAttr>();
   TerminateIf((alias_attr && list_attr),
               "cannot mark a field both as alias and as list", decl);
-  std::string field_type_name;
-  if (auto *r = decl->getType().getTypePtr()->getAsCXXRecordDecl()) {
-    field_type_name = GetFullName(r);
-  } else {
-    field_type_name = decl->getType().getAsString();
-  }
+
+  const clang::PrintingPolicy &policy =
+      decl->getASTContext().getPrintingPolicy();
 
   // check if the field is an alias
   if (alias_attr) {
     auto *alias_field = proto_field->mutable_alias_field();
     const auto &alias_type_name = alias_attr->getAliasType().str();
     alias_field->set_alias_kind(StringToKind(alias_type_name, decl));
-    alias_field->set_original_type_name(field_type_name);
+    GetFullName(field_type, alias_field->mutable_original_type_name(), policy);
+    alias_field->mutable_original_type_name();
   }
   // check if the field is a list
   else if (list_attr) {
     auto *list_field = proto_field->mutable_list_field();
     const auto &alias_type_name = list_attr->getAliasElementType().str();
     list_field->set_alias_kind(StringToKind(alias_type_name, decl));
-    list_field->set_original_type_name(field_type_name);
+    GetFullName(field_type, list_field->mutable_original_type_name(), policy);
     list_field->set_iterator(list_attr->getListIterator().str());
     list_field->set_emplacer(list_attr->getListEmplacer().str());
   }
@@ -184,8 +201,9 @@ void HandleField(const clang::ValueDecl *decl, ProtoFileInfo &proto_file_info,
     auto *basic_field = proto_field->mutable_basic_field();
     basic_field->set_kind(GetProtoKind(built_in));
   } else {
-    std::cerr << "unknown field type, do you forget to add attribute?"
-              << std::endl;
+    std::cerr << "unknown field type" << field_type->getTypeClassName()
+              << ", do you forget to add attribute?" << std::endl;
+    std::terminate();
   }
 }
 
@@ -195,9 +213,11 @@ bool ParseRecordDetails(const clang::CXXRecordDecl *record,
   bool has_serializable_field = false;
   CheckRecord(record);
   if (record->getNumBases() == 1) {
-    auto *parent = record->bases_begin()->getType()->getAsCXXRecordDecl();
+    const auto *type = record->bases_begin()->getType().getTypePtr();
+    auto *parent = type->getAsCXXRecordDecl();
     has_serializable_field |= ParseRecordDetails(parent, proto_file_info);
-    proto_file_info.add_ancestors(GetFullName(parent));
+    GetFullName(type, proto_file_info.add_ancestors(),
+                record->getASTContext().getPrintingPolicy());
   }
 
   // parse fields
@@ -212,7 +232,7 @@ bool ParseRecordDetails(const clang::CXXRecordDecl *record,
   // parse alias getters
   for (auto *method : record->methods()) {
     if (auto *serialized_attr = method->getAttr<clang::MESerializedAttr>()) {
-      CheckMethod(method);
+      has_serializable_field |= true;
       HandleField(method, proto_file_info, serialized_attr,
                   GetFieldType(method));
     }
@@ -222,22 +242,31 @@ bool ParseRecordDetails(const clang::CXXRecordDecl *record,
 
 void HandleRecord(const clang::CXXRecordDecl *record) {
   ProtoFileInfo info;
-  std::string full_name = GetFullName(record);
-  info.set_full_class_name(full_name);
+  GetFullName(record->getTypeForDecl(), info.mutable_full_class_name(),
+              record->getASTContext().getPrintingPolicy());
+  std::string full_cpp_name = FullNameAsString(info.full_class_name(), "::");
+  std::string file_name = FullNameAsString(info.full_class_name(), "-");
   TerminateIf(!ParseRecordDetails(record, info),
-              std::string("target \"" + full_name +
+              std::string("target \"" + full_cpp_name +
                           "\" do not have any field to be serialized")
                   .c_str(),
               record);
+  std::cout << "class " + full_cpp_name + " scanned." << std::endl;
   if (readable_class_info) {
-    std::fstream out(out_dir + full_name + ".info.txt",
+    std::fstream out(out_dir + "/" + file_name + ".info.txt",
                      std::ios::out | std::ios::trunc);
+    if (!out) {
+      std::cerr << "cannot create " + file_name + ".info.txt";
+    }
     std::string data;
     google::protobuf::TextFormat::PrintToString(info, &data);
     out << data;
   } else {
-    std::fstream out(out_dir + full_name + ".info",
+    std::fstream out(out_dir + "/" + file_name + ".info",
                      std::ios::binary | std::ios::out | std::ios::trunc);
+    if (!out) {
+      std::cerr << "cannot create " + file_name + ".info.txt";
+    }
     if (!info.SerializeToOstream(&out)) {
       std::cerr << "failed to write class info" << std::endl;
     }
@@ -253,6 +282,12 @@ public:
             Result.Nodes.getNodeAs<clang::CXXRecordDecl>("Record")) {
       for (auto *field : record->fields()) {
         if (field->getAttr<clang::MESerializedAttr>() != nullptr) {
+          HandleRecord(record);
+          break;
+        }
+      }
+      for (auto *method : record->methods()) {
+        if (method->getAttr<clang::MESerializedAttr>() != nullptr) {
           HandleRecord(record);
           break;
         }
