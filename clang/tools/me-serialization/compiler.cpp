@@ -333,9 +333,11 @@ void GenerateProtobuf(const ProtoFileInfo &proto_file_info,
   }
 
   out << "syntax = \"proto3\";" << std::endl;
-  out << "package " << NamespaceAsString(proto_file_info.full_class_name(), ".")
-      << ";" << std::endl;
-
+  std::string package_name = NamespaceAsString(proto_file_info.full_class_name(), ".");
+  if (!package_name.empty()) {
+    out << "package " << NamespaceAsString(proto_file_info.full_class_name(), ".")
+        << ";" << std::endl;
+  }
   out << "message " << *proto_file_info.full_class_name().strings().rbegin()
       << " {" << std::endl;
   int i = 1;
