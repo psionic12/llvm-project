@@ -23,27 +23,21 @@ message FullName {
   repeated string strings = 1;
 }
 
-message BasicField {
-  ProtoKind kind = 1;
-}
-
 message AliasField {
   FullName original_type_name = 1;
-  ProtoKind alias_kind = 2;
 }
 
 message ListField {
-  ProtoKind alias_kind = 1;
-  FullName original_type_name = 2;
-  string iterator = 3;
-  string emplacer = 4;
+  FullName original_type_name = 1;
+  string iterator = 2;
+  string emplacer = 3;
 }
 
 message Field {
   string name = 1;
   repeated string categories = 2;
+  ProtoKind kind = 3;
   oneof value {
-    BasicField basic_field = 3;
     AliasField alias_field = 4;
     ListField list_field = 5;
   }

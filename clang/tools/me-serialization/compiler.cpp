@@ -6,32 +6,34 @@
 #include <clang/Frontend/FrontendActions.h>
 #include <clang/Tooling/CommonOptionsParser.h>
 #include <clang/Tooling/Tooling.h>
-#include <google/protobuf/text_format.h>
 #include <llvm/Support/CommandLine.h>
+
+#include <google/protobuf/compiler/command_line_interface.h>
+#include <google/protobuf/compiler/cpp/cpp_generator.h>
+#include <google/protobuf/text_format.h>
 
 #include "record_info.pb.h"
 
-llvm::cl::OptionCategory serializable_category("serialization options");
-llvm::cl::extrahelp
+static llvm::cl::OptionCategory serializable_category("serialization options");
+static llvm::cl::extrahelp
     common_help(clang::tooling::CommonOptionsParser::HelpMessage);
-llvm::cl::opt<std::string>
+static llvm::cl::opt<std::string>
     builtin_includes("builtin",
                      llvm::cl::desc("path of Clang builtin includes"),
                      llvm::cl::cat(serializable_category));
-llvm::cl::opt<std::string> out_dir("o", llvm::cl::desc("Specify output dir"),
-                                   llvm::cl::value_desc("dir"),
-                                   llvm::cl::init("./"),
-                                   llvm::cl::cat(serializable_category));
-llvm::cl::opt<bool>
+static llvm::cl::opt<std::string> out_dir("o",
+                                          llvm::cl::desc("Specify output dir"),
+                                          llvm::cl::value_desc("dir"),
+                                          llvm::cl::init("./"),
+                                          llvm::cl::cat(serializable_category));
+static llvm::cl::opt<bool>
     readable_class_info("readable",
                         llvm::cl::desc("generate readable class info"));
-clang::ast_matchers::DeclarationMatcher record_matcher =
+static clang::ast_matchers::DeclarationMatcher record_matcher =
     clang::ast_matchers::cxxRecordDecl(clang::ast_matchers::hasDefinition())
         .bind("Record");
 
-const clang::ASTContext *ast_context = nullptr;
-
-const std::unordered_map<std::string, ProtoKind> str_to_kind_map{
+static const std::unordered_map<std::string, ProtoKind> str_to_kind_map{
     {"double", ProtoKind::TypeDouble},
     {"float", ProtoKind::TypeFloat},
     {"int64", ProtoKind::TypeInt64},
@@ -48,6 +50,46 @@ const std::unordered_map<std::string, ProtoKind> str_to_kind_map{
     {"sint32", ProtoKind::TypeSint32},
     {"sint64", ProtoKind::TypeSint64},
 };
+
+static constexpr const char *KindToString(ProtoKind kind) {
+  switch (kind) {
+  case ProtoKind::TypeDouble:
+    return "double";
+  case ProtoKind::TypeFloat:
+    return "float";
+  case ProtoKind::TypeInt64:
+    return "int64";
+  case ProtoKind::TypeUint64:
+    return "uint64";
+  case ProtoKind::TypeInt32:
+    return "int32";
+  case ProtoKind::TypeFixed64:
+    return "fixed64";
+  case ProtoKind::TypeFixed32:
+    return "fixed32";
+  case ProtoKind::TypeBool:
+    return "bool";
+  case ProtoKind::TypeString:
+    return "string";
+  case ProtoKind::TypeBytes:
+    return "bytes";
+  case ProtoKind::TypeUint32:
+    return "uint32";
+  case ProtoKind::TypeSfixed32:
+    return "sfixed32";
+  case ProtoKind::TypeSfixed64:
+    return "sfixed64";
+  case ProtoKind::TypeSint32:
+    return "sint32";
+  case ProtoKind::TypeSint64:
+    return "sint64";
+  default:
+    std::cerr << "parse proto kind failed";
+    std::terminate();
+  }
+}
+
+static std::vector<std::string> generated_protobuf_files;
 
 void TerminateIf(bool condition, const char *err, const clang::Decl *decl) {
   if (condition) {
@@ -90,6 +132,19 @@ void GetFullName(const clang::Type *type, FullName *full_name,
   } else if (const auto *built_in_type = type->getAs<clang::BuiltinType>()) {
     full_name->add_strings(built_in_type->getNameAsCString(policy));
   }
+}
+
+std::string NamespaceAsString(const FullName &full_name,
+                              const std::string &replacement) {
+  std::string s;
+  auto iterator = full_name.strings().begin();
+  while (iterator != full_name.strings().end() - 2) {
+    s += *iterator;
+    s += replacement;
+    iterator++;
+  }
+  s += *iterator;
+  return s;
 }
 
 std::string FullNameAsString(const FullName &full_name,
@@ -183,7 +238,7 @@ void HandleField(const clang::NamedDecl *decl, ProtoFileInfo &proto_file_info,
   if (alias_attr) {
     auto *alias_field = proto_field->mutable_alias_field();
     const auto &alias_type_name = alias_attr->getAliasType().str();
-    alias_field->set_alias_kind(StringToKind(alias_type_name, decl));
+    proto_field->set_kind(StringToKind(alias_type_name, decl));
     GetFullName(field_type, alias_field->mutable_original_type_name(), policy);
     alias_field->mutable_original_type_name();
   }
@@ -191,19 +246,18 @@ void HandleField(const clang::NamedDecl *decl, ProtoFileInfo &proto_file_info,
   else if (list_attr) {
     auto *list_field = proto_field->mutable_list_field();
     const auto &alias_type_name = list_attr->getAliasElementType().str();
-    list_field->set_alias_kind(StringToKind(alias_type_name, decl));
+    proto_field->set_kind(StringToKind(alias_type_name, decl));
     GetFullName(field_type, list_field->mutable_original_type_name(), policy);
     list_field->set_iterator(list_attr->getListIterator().str());
     list_field->set_emplacer(list_attr->getListEmplacer().str());
   }
   // check if the field is a built-in type
-  else if (const auto *built_in = field_type->getAs<clang::BuiltinType>()) {
-    auto *basic_field = proto_field->mutable_basic_field();
-    basic_field->set_kind(GetProtoKind(built_in));
-  } else {
-    std::cerr << "unknown field type" << field_type->getTypeClassName()
-              << ", do you forget to add attribute?" << std::endl;
-    std::terminate();
+  else {
+    // TODO add default alias type
+    const auto *built_in = field_type->getAs<clang::BuiltinType>();
+    TerminateIf(!built_in,
+                "unknown field type, do you forget to add attribute?", decl);
+    proto_field->set_kind(GetProtoKind(built_in));
   }
 }
 
@@ -240,7 +294,85 @@ bool ParseRecordDetails(const clang::CXXRecordDecl *record,
   return has_serializable_field;
 }
 
+void GenerateRecordInfo(const ProtoFileInfo &proto_file_info,
+                        const std::string &file_name) {
+
+  if (readable_class_info) {
+    std::fstream out(out_dir + "/" + file_name + ".info.txt",
+                     std::ios::out | std::ios::trunc);
+    if (!out) {
+      std::cerr << "cannot create " + file_name + ".info.txt";
+    }
+    std::string data;
+    google::protobuf::TextFormat::PrintToString(proto_file_info, &data);
+    out << data;
+    out.close();
+  } else {
+    std::fstream out(out_dir + "/" + file_name + ".info",
+                     std::ios::binary | std::ios::out | std::ios::trunc);
+    if (!out) {
+      std::cerr << "cannot create " + file_name + ".info.txt";
+    }
+    if (!proto_file_info.SerializeToOstream(&out)) {
+      std::cerr << "failed to write class info" << std::endl;
+    }
+    out.close();
+  }
+}
+
+void GenerateProtobuf(const ProtoFileInfo &proto_file_info,
+                      const std::string &file_name) {
+  std::string path = out_dir + "/" + file_name + ".proto";
+  std::fstream out(path, std::ios::out | std::ios::trunc);
+  if (!out) {
+    std::cerr << "cannot create " + file_name + ".proto";
+  }
+
+  out << "syntax = \"proto3\";" << std::endl;
+  out << "package " << NamespaceAsString(proto_file_info.full_class_name(), ".")
+      << ";" << std::endl;
+
+  out << "message " << *proto_file_info.full_class_name().strings().rbegin()
+      << " {" << std::endl;
+  int i = 1;
+  for (const auto &field : proto_file_info.fields()) {
+    out << "\t";
+    if (field.has_list_field()) {
+      out << "repeated ";
+    }
+    out << KindToString(field.kind()) << " " << field.name() << " = " << i
+        << ";" << std::endl;
+    i++;
+  }
+  out << "}" << std::endl;
+  out.close();
+  generated_protobuf_files.push_back(std::move(path));
+}
+
+void ProtoToCpp() {
+  namespace gpc = google::protobuf::compiler;
+  gpc::CommandLineInterface cli;
+  cli.AllowPlugins("protoc-");
+
+  gpc::cpp::CppGenerator cpp_generator;
+  cli.RegisterGenerator("--cpp_out", "--cpp_opt", &cpp_generator,
+                        "Generate C++ header and source.");
+  char const**argv = new char const*[generated_protobuf_files.size() + 5];
+  int argc = 0;
+  argv[argc++] = "protoc";
+  argv[argc++] = "-I";
+  argv[argc++] = out_dir.data();
+  argv[argc++] = "--cpp_out";
+  argv[argc++] = out_dir.data();
+  for (auto& str : generated_protobuf_files) {
+    argv[argc++] = str.data();
+  }
+
+  cli.Run(argc, argv);
+}
+
 void HandleRecord(const clang::CXXRecordDecl *record) {
+  // TODO check if target is newer than dependency
   ProtoFileInfo info;
   GetFullName(record->getTypeForDecl(), info.mutable_full_class_name(),
               record->getASTContext().getPrintingPolicy());
@@ -252,25 +384,8 @@ void HandleRecord(const clang::CXXRecordDecl *record) {
                   .c_str(),
               record);
   std::cout << "class " + full_cpp_name + " scanned." << std::endl;
-  if (readable_class_info) {
-    std::fstream out(out_dir + "/" + file_name + ".info.txt",
-                     std::ios::out | std::ios::trunc);
-    if (!out) {
-      std::cerr << "cannot create " + file_name + ".info.txt";
-    }
-    std::string data;
-    google::protobuf::TextFormat::PrintToString(info, &data);
-    out << data;
-  } else {
-    std::fstream out(out_dir + "/" + file_name + ".info",
-                     std::ios::binary | std::ios::out | std::ios::trunc);
-    if (!out) {
-      std::cerr << "cannot create " + file_name + ".info.txt";
-    }
-    if (!info.SerializeToOstream(&out)) {
-      std::cerr << "failed to write class info" << std::endl;
-    }
-  }
+  GenerateRecordInfo(info, file_name);
+  GenerateProtobuf(info, file_name);
 }
 
 class RecordMatcherCallback
@@ -305,5 +420,6 @@ int main(int argc, const char **argv) {
   RecordMatcherCallback callback;
   clang::ast_matchers::MatchFinder finder;
   finder.addMatcher(record_matcher, &callback);
-  return tool.run(clang::tooling::newFrontendActionFactory(&finder).get());
+  tool.run(clang::tooling::newFrontendActionFactory(&finder).get());
+  ProtoToCpp();
 }

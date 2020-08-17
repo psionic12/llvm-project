@@ -1,16 +1,14 @@
 #ifndef MOMENTENGINE2_INCLUDE_COMPONENT_TRANSFORM_H_
 #define MOMENTENGINE2_INCLUDE_COMPONENT_TRANSFORM_H_
 #include "component.h"
-#include <glm/glm.hpp>
-#include <glm/gtc/quaternion.hpp>
-#include <glm/gtx/quaternion.hpp>
+#include "../alias_types.h"
 namespace me {
 namespace component {
 class Transform : public Component {
 public:
-  glm::vec3 position;
-  glm::quat rotation;
-  glm::vec3 scale;
+  [[me::serialized()]][[me::alias("string")]]me::alias::FVec3 position;
+  [[me::serialized()]][[me::alias("string")]]me::alias::FQuat rotation;
+  [[me::serialized()]][[me::alias("string")]]me::alias::FVec3 scale;
 };
 } // namespace component
 } // namespace me

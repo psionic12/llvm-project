@@ -1,12 +1,14 @@
 #ifndef MOMENTENGINE2_INCLUDE_COMPONENT_LIGHT_H_
 #define MOMENTENGINE2_INCLUDE_COMPONENT_LIGHT_H_
 #include "component.h"
-#include <glm/glm.hpp>
+#include "../alias_types.h"
 namespace me {
 namespace component {
 class Light : public Component {
 private:
-  glm::vec3 color_{1.f, 1.f, 1.f};
+  [[me::serialized()]]
+  [[me::alias("string")]]
+  me::alias::FVec3 color_{1.f, 1.f, 1.f};
 };
 } // namespace component
 } // namespace me
