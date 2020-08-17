@@ -24,7 +24,7 @@ static llvm::cl::opt<std::string>
 static llvm::cl::opt<std::string> out_dir("o",
                                           llvm::cl::desc("Specify output dir"),
                                           llvm::cl::value_desc("dir"),
-                                          llvm::cl::init("./"),
+                                          llvm::cl::init("."),
                                           llvm::cl::cat(serializable_category));
 static llvm::cl::opt<bool>
     readable_class_info("readable",
@@ -137,8 +137,10 @@ void GetFullName(const clang::Type *type, FullName *full_name,
 std::string NamespaceAsString(const FullName &full_name,
                               const std::string &replacement) {
   std::string s;
+  if (full_name.strings_size() < 2)
+    return s;
   auto iterator = full_name.strings().begin();
-  while (iterator != full_name.strings().end() - 2) {
+  while (iterator < full_name.strings().end() - 2) {
     s += *iterator;
     s += replacement;
     iterator++;
@@ -150,8 +152,10 @@ std::string NamespaceAsString(const FullName &full_name,
 std::string FullNameAsString(const FullName &full_name,
                              const std::string &replacement) {
   std::string s;
+  if (full_name.strings().empty())
+    return s;
   auto iterator = full_name.strings().begin();
-  while (iterator != full_name.strings().end() - 1) {
+  while (iterator < full_name.strings().end() - 1) {
     s += *iterator;
     s += replacement;
     iterator++;
@@ -357,14 +361,14 @@ void ProtoToCpp() {
   gpc::cpp::CppGenerator cpp_generator;
   cli.RegisterGenerator("--cpp_out", "--cpp_opt", &cpp_generator,
                         "Generate C++ header and source.");
-  char const**argv = new char const*[generated_protobuf_files.size() + 5];
+  char const **argv = new char const *[generated_protobuf_files.size() + 5];
   int argc = 0;
   argv[argc++] = "protoc";
   argv[argc++] = "-I";
   argv[argc++] = out_dir.data();
   argv[argc++] = "--cpp_out";
   argv[argc++] = out_dir.data();
-  for (auto& str : generated_protobuf_files) {
+  for (auto &str : generated_protobuf_files) {
     argv[argc++] = str.data();
   }
 

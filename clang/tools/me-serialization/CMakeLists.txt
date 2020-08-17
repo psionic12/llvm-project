@@ -19,7 +19,7 @@ clang_target_link_libraries(me-compiler
         clangASTMatchers
         clangBasic
         clangTooling
-        protobuf::libprotobuf
         protobuf::libprotoc
+        protobuf::libprotobuf
         )
 protobuf_generate(TARGET me-compiler IMPORT_DIRS ${Protobuf_INCLUDE_DIRS} PROTOC_OUT_DIR ${GENERATED_SRCS})
