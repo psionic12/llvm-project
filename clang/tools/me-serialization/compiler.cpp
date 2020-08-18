@@ -7,6 +7,7 @@
 #include <clang/Tooling/CommonOptionsParser.h>
 #include <clang/Tooling/Tooling.h>
 #include <llvm/Support/CommandLine.h>
+#include <llvm/Support/FileSystem.h>
 
 #include <google/protobuf/compiler/command_line_interface.h>
 #include <google/protobuf/compiler/cpp/cpp_generator.h>
@@ -89,7 +90,7 @@ static constexpr const char *KindToString(ProtoKind kind) {
   }
 }
 
-static std::vector<std::string> generated_protobuf_files;
+static std::unordered_set<std::string> generated_protobuf_files;
 
 void TerminateIf(bool condition, const char *err, const clang::Decl *decl) {
   if (condition) {
@@ -325,18 +326,19 @@ void GenerateRecordInfo(const ProtoFileInfo &proto_file_info,
 }
 
 void GenerateProtobuf(const ProtoFileInfo &proto_file_info,
-                      const std::string &file_name) {
-  std::string path = out_dir + "/" + file_name + ".proto";
+                      const std::string &path) {
   std::fstream out(path, std::ios::out | std::ios::trunc);
   if (!out) {
-    std::cerr << "cannot create " + file_name + ".proto";
+    std::cerr << "cannot create " + path;
   }
 
   out << "syntax = \"proto3\";" << std::endl;
-  std::string package_name = NamespaceAsString(proto_file_info.full_class_name(), ".");
+  std::string package_name =
+      NamespaceAsString(proto_file_info.full_class_name(), ".");
   if (!package_name.empty()) {
-    out << "package " << NamespaceAsString(proto_file_info.full_class_name(), ".")
-        << ";" << std::endl;
+    out << "package "
+        << NamespaceAsString(proto_file_info.full_class_name(), ".") << ";"
+        << std::endl;
   }
   out << "message " << *proto_file_info.full_class_name().strings().rbegin()
       << " {" << std::endl;
@@ -352,7 +354,6 @@ void GenerateProtobuf(const ProtoFileInfo &proto_file_info,
   }
   out << "}" << std::endl;
   out.close();
-  generated_protobuf_files.push_back(std::move(path));
 }
 
 void ProtoToCpp() {
@@ -374,16 +375,48 @@ void ProtoToCpp() {
     argv[argc++] = str.data();
   }
 
+  std::cout << "prepare to run `";
+  for (int i = 0; i < argc; i++) {
+    std::cout << argv[i] << " ";
+  }
+  std::cout << "`" << std::endl;
+
   cli.Run(argc, argv);
 }
 
+bool IsTargetOutOfDate(const clang::StringRef source,
+                       const clang::StringRef target) {
+  llvm::sys::fs::file_status source_status;
+  llvm::sys::fs::file_status target_status;
+  llvm::sys::fs::status(source, source_status);
+  llvm::sys::fs::status(target, target_status);
+  return !llvm::sys::fs::exists(target_status) ||
+         (source_status.getLastModificationTime() >
+          target_status.getLastModificationTime());
+}
+
+bool IsPathCached(const std::string &path) {
+  return generated_protobuf_files.find(path) != generated_protobuf_files.end();
+}
+
 void HandleRecord(const clang::CXXRecordDecl *record) {
-  // TODO check if target is newer than dependency
   ProtoFileInfo info;
   GetFullName(record->getTypeForDecl(), info.mutable_full_class_name(),
               record->getASTContext().getPrintingPolicy());
   std::string full_cpp_name = FullNameAsString(info.full_class_name(), "::");
   std::string file_name = FullNameAsString(info.full_class_name(), "-");
+  // only parse the record if the generated file is out of date and not cached
+  const auto &source_location =
+      record->getASTContext().getSourceManager().getBufferName(
+          record->getLocation());
+  std::string target_path = out_dir + "/" + file_name + ".pb.h";
+  std::string source_path = out_dir + "/" + file_name + "proto";
+  if (IsPathCached(source_path) ||
+      !IsTargetOutOfDate(source_location, target_path)) {
+    std::cout << target_path << " is up to date" << std::endl;
+    return;
+  }
+
   TerminateIf(!ParseRecordDetails(record, info),
               std::string("target \"" + full_cpp_name +
                           "\" do not have any field to be serialized")
@@ -391,7 +424,9 @@ void HandleRecord(const clang::CXXRecordDecl *record) {
               record);
   std::cout << "class " + full_cpp_name + " scanned." << std::endl;
   GenerateRecordInfo(info, file_name);
-  GenerateProtobuf(info, file_name);
+  GenerateProtobuf(info, source_path);
+  // put this file path to the cache
+  generated_protobuf_files.emplace(std::move(source_path));
 }
 
 class RecordMatcherCallback
