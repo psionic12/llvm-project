@@ -43,3 +43,4 @@ add_clang_subdirectory(libclang)
 
 # moment engine serialization tool
 add_clang_subdirectory(me-serialization)
+add_clang_subdirectory(me-serialization-v2)
