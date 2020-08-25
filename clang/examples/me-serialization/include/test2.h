@@ -1,0 +1,11 @@
+#ifndef LLVM_CLANG_EXAMPLES_ME_SERIALIZATION_INCLUDE_TEST2_H_
+#define LLVM_CLANG_EXAMPLES_ME_SERIALIZATION_INCLUDE_TEST2_H_
+namespace me {
+namespace test {
+class Two {
+
+};
+class Three {};
+}
+}
+#endif // LLVM_CLANG_EXAMPLES_ME_SERIALIZATION_INCLUDE_TEST2_H_

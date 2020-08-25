@@ -5,7 +5,8 @@ set(LLVM_LINK_COMPONENTS
 
 add_clang_tool(me-compiler-v2
         compiler.cpp
-        serializable_generator.cpp
+        record_info.cpp
+        record_cache.cpp
         )
 
 clang_target_link_libraries(me-compiler-v2

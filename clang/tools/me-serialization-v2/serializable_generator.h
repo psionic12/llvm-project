@@ -8,16 +8,17 @@
 class SerializableVisitor
     : public clang::RecursiveASTVisitor<SerializableVisitor> {
 public:
-  explicit SerializableVisitor(clang::ASTContext *Context,
-                               llvm::StringRef InFile)
+  bool VisitCXXRecordDecl(clang::CXXRecordDecl *Declaration);
+};
+
+class SerializableConsumer : public clang::ASTConsumer {
+public:
+  SerializableConsumer(clang::ASTContext *Context, llvm::StringRef InFile)
       : Context(Context), InFile(InFile) {}
 
-  bool VisitCXXRecordDecl(clang::CXXRecordDecl *Declaration);
-
-private:
-  const clang::ASTContext *Context;
-  const llvm::StringRef InFile;
-  std::unordered_map<const clang::CXXRecordDecl *, RecordInfo> CachedRecords;
+  virtual void HandleTranslationUnit(clang::ASTContext &Context) {
+    Visitor.TraverseDecl(Context.getTranslationUnitDecl());
+  }
   class SerializableClassName {
   public:
     static constexpr const char name[] = "me::serialization::Serializable";
@@ -26,7 +27,7 @@ private:
   public:
     static constexpr const char name[] = "me::serialization::SerializableList";
   };
-  template <typename T> bool IsType(const clang::CXXRecordDecl *RecordDecl) {
+  template <typename T> bool isType(const clang::CXXRecordDecl *RecordDecl) {
     static const clang::CXXRecordDecl *Target = nullptr;
     if (Target != nullptr) {
       return RecordDecl == Target;
@@ -40,36 +41,39 @@ private:
     }
   }
   template <typename T>
-  bool IsDeriveFrom(const clang::CXXRecordDecl *RecordDecl) {
-    if (IsType<T>(RecordDecl))
+  bool isDeriveFrom(const clang::CXXRecordDecl *RecordDecl) {
+    if (!RecordDecl) return false;
+    if (isType<T>(RecordDecl))
       return true;
     else {
       for (const auto &Base : RecordDecl->bases()) {
         if (const auto *BaseDecl =
                 Base.getType().getTypePtr()->getAsCXXRecordDecl()) {
-          IsDeriveFrom<T>(BaseDecl);
+          isDeriveFrom<T>(BaseDecl);
         } else {
           return true;
         }
       }
     }
   }
-  EntryKind TypeToEntryKind(const clang::Type *Type);
-  const RecordInfo *TryGetCachedRecord(const clang::CXXRecordDecl *target);
-};
-
-class SerializableConsumer : public clang::ASTConsumer {
-public:
-  explicit SerializableConsumer(clang::ASTContext *Context,
-                                llvm::StringRef InFile)
-      : Visitor(Context, InFile) {}
-
-  virtual void HandleTranslationUnit(clang::ASTContext &Context) {
-    Visitor.TraverseDecl(Context.getTranslationUnitDecl());
+  const clang::PrintingPolicy &getPrintingPolicy() {
+    return Context->getPrintingPolicy();
+  }
+  const RecordInfo &getRecord(const clang::CXXRecordDecl *Decl) {
+    // God damn I want to use try_emplace.
+    const auto &Result = Cache.find(Decl);
+    if (Result == Cache.end()) {
+      return Cache.emplace(Decl, RecordInfo(*this, Decl)).first->second;
+    } else {
+      return Result->second;
+    }
   }
 
 private:
+  std::unordered_map<const clang::CXXRecordDecl *, RecordInfo> Cache;
   SerializableVisitor Visitor;
+  clang::ASTContext *Context;
+  llvm::StringRef InFile;
 };
 
 class SerializableGenerationAction : public clang::ASTFrontendAction {

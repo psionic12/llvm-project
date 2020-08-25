@@ -1,5 +1,7 @@
 #ifndef LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_RECORD_INFO_H_
 #define LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_RECORD_INFO_H_
+#include "clang/AST/Type.h"
+class SerializableConsumer;
 enum EntryKind {
   TypeBool,
   TypeChar,
@@ -16,31 +18,28 @@ enum EntryKind {
 };
 class EntryInfo {
 public:
-public:
+  EntryInfo(SerializableConsumer& Consumer, const clang::Type* Type, clang::StringRef Name);
   void AddCategory(clang::StringRef category) {
-    categories_.emplace_back(category);
+    Categories.emplace_back(category);
   }
-  void SetType(std::string &&type) { type_ = std::move(type); }
-  void SetName(std::string &&name) { name_ = std::move(name); }
-  void SetRepeated(bool repeated) { repeated_ = repeated; }
-  void SetEntryKind(EntryKind kind) { kind_ = kind; }
-
 private:
-  std::string type_;
-  std::string name_;
-  std::vector<clang::StringRef> categories_;
-  bool repeated_ = false;
-  EntryKind kind_;
+  SerializableConsumer& Consumer;
+  clang::StringRef TypeName;
+  clang::StringRef EntryName;
+  std::vector<clang::StringRef> Categories;
+  bool Repeated = false;
+  EntryKind Kind;
 };
 
 class RecordInfo {
 public:
-  void AddBase(const RecordInfo *base) { bases_.push_back(base); }
-  void SetToInvalid() { invalid_ = true; }
-  bool Invalid() { return invalid_; }
-
+  RecordInfo(SerializableConsumer& Consumer, const clang::CXXRecordDecl* RecordDecl);
+  void AddBase(const RecordInfo *Base) { Bases.push_back(Base); }
 private:
-  bool invalid_ = false;
-  std::vector<const RecordInfo *> bases_;
+  SerializableConsumer& Consumer;
+  bool Serializable = false;
+  bool Pure = false;
+  std::vector<const RecordInfo *> Bases;
+  std::vector<EntryInfo> Entries;
 };
 #endif // LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_RECORD_INFO_H_
