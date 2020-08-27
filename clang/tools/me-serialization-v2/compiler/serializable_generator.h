@@ -1,6 +1,7 @@
 #ifndef LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_SERIALIZABLE_GENERATOR_H_
 #define LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_SERIALIZABLE_GENERATOR_H_
 #include "record_info.h"
+#include "indexer.h"
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Frontend/CompilerInstance.h"
@@ -8,54 +9,39 @@
 class SerializableVisitor
     : public clang::RecursiveASTVisitor<SerializableVisitor> {
 public:
+  SerializableVisitor(SerializableConsumer &Consumer) : Consumer(Consumer) {}
   bool VisitCXXRecordDecl(clang::CXXRecordDecl *Declaration);
+
+private:
+  SerializableConsumer &Consumer;
+};
+
+class SerializableClassFinder
+    : public clang::RecursiveASTVisitor<SerializableVisitor> {
+public:
+  bool VisitCXXRecordDecl(clang::CXXRecordDecl *Declaration) {
+    if (Declaration->getQualifiedNameAsString() ==
+        "me::serialization::Serializable") {
+      SerializableDecl = Declaration;
+      // class found, do not continue
+      return false;
+    }
+    return true;
+  }
+  const clang::CXXRecordDecl *getDecl() { return SerializableDecl; }
+
+private:
+  const clang::CXXRecordDecl *SerializableDecl = nullptr;
 };
 
 class SerializableConsumer : public clang::ASTConsumer {
 public:
-  SerializableConsumer(clang::ASTContext *Context, llvm::StringRef InFile)
-      : Context(Context), InFile(InFile) {}
+  SerializableConsumer(clang::ASTContext *Context, llvm::StringRef InFile);
+  void LogWarning(const clang::Decl *Decl, const char *Format, ...);
 
-  virtual void HandleTranslationUnit(clang::ASTContext &Context) {
-    Visitor.TraverseDecl(Context.getTranslationUnitDecl());
-  }
-  class SerializableClassName {
-  public:
-    static constexpr const char name[] = "me::serialization::Serializable";
-  };
-  class SerializableListClassName {
-  public:
-    static constexpr const char name[] = "me::serialization::SerializableList";
-  };
-  template <typename T> bool isType(const clang::CXXRecordDecl *RecordDecl) {
-    static const clang::CXXRecordDecl *Target = nullptr;
-    if (Target != nullptr) {
-      return RecordDecl == Target;
-    } else {
-      if (RecordDecl->getQualifiedNameAsString() == T::name) {
-        Target = RecordDecl;
-        return true;
-      } else {
-        return false;
-      }
-    }
-  }
-  template <typename T>
-  bool isDeriveFrom(const clang::CXXRecordDecl *RecordDecl) {
-    if (!RecordDecl) return false;
-    if (isType<T>(RecordDecl))
-      return true;
-    else {
-      for (const auto &Base : RecordDecl->bases()) {
-        if (const auto *BaseDecl =
-                Base.getType().getTypePtr()->getAsCXXRecordDecl()) {
-          isDeriveFrom<T>(BaseDecl);
-        } else {
-          return true;
-        }
-      }
-    }
-  }
+  void LogError(const clang::Decl *Decl, const char *format, ...);
+
+  virtual void HandleTranslationUnit(clang::ASTContext &Context);
   const clang::PrintingPolicy &getPrintingPolicy() {
     return Context->getPrintingPolicy();
   }
@@ -68,12 +54,18 @@ public:
       return Result->second;
     }
   }
+  const clang::CXXRecordDecl *serializableDecl() { return SerializableDecl; }
+  bool HasError() { return HasErrors; }
 
 private:
   std::unordered_map<const clang::CXXRecordDecl *, RecordInfo> Cache;
   SerializableVisitor Visitor;
+  SerializableClassFinder Finder;
   clang::ASTContext *Context;
   llvm::StringRef InFile;
+  const clang::CXXRecordDecl *SerializableDecl = nullptr;
+  bool HasErrors = false;
+  EntryIndexer Indexer;
 };
 
 class SerializableGenerationAction : public clang::ASTFrontendAction {
