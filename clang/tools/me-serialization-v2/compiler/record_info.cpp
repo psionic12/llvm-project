@@ -188,7 +188,24 @@ void EntryInfo::ToCpp(std::fstream &Out, EntryIndexer::EntryMap &EntryMap) {
     index = EntryMap.size() + 1;
     EntryMap[EntryName.str()] = index;
   }
-  Out << "// " << TypeName.str() << " " << EntryName.str() << "\n";
+
+  Out << "// " << (Repeated ? "repeated" : "") << TypeName.str() << " "
+      << EntryName.str() << " = " << index << "\n";
+  if (!Repeated) {
+    switch (Kind) {
+    case TypeFloat:
+    case TypeDouble:
+      Out << "if (" << EntryName.str() << " < 0 || " << EntryName.str()
+          << " > 0) {\n";
+      break;
+    default:
+      Out << "if (" << EntryName.str() << " != 0) {\n";
+    }
+  } else {
+    Out << "if (" << EntryName.str() << ".size() > 0) {\n";
+  }
+
+  Out << "}\n";
 }
 void RecordInfo::ToCpp(std::fstream &Out, EntryIndexer &Indexer) {
   if (!isSerializable())
