@@ -3,10 +3,10 @@
 #include <cstdint>
 #include <type_traits>
 namespace me {
-template<typename Test, template<typename...> class Ref>
+template <typename Test, template <typename...> class Ref>
 struct is_specialization : std::false_type {};
 
-template<template<typename...> class Ref, typename... Args>
+template <template <typename...> class Ref, typename... Args>
 struct is_specialization<Ref<Args...>, Ref> : std::true_type {};
 namespace serialization {
 #define STRONG_TYPEDEF(_base, _type)                                           \
@@ -43,11 +43,14 @@ namespace serialization {
   private:                                                                     \
     _base value;                                                               \
   };
-// no 8 and 16 bit int yet, because protobuf do not support that
-STRONG_TYPEDEF(uint32_t, uint32)
-STRONG_TYPEDEF(uint64_t, uint64)
-STRONG_TYPEDEF(int32_t, int32)
-STRONG_TYPEDEF(int64_t, int64)
+// strong typedef for xintxx_t, used to call fixed type size coder.
+// no 8 and 16 bit int yet, because protobuf do not support that.
+// this is used for serialization compiler to treat xintxx_t,
+// do not use it in you code.
+STRONG_TYPEDEF(uint32_t, strong_uint32)
+STRONG_TYPEDEF(uint64_t, strong_uint64)
+STRONG_TYPEDEF(int32_t, strong_int32)
+STRONG_TYPEDEF(int64_t, strong_int64)
 enum class WireType : int {
   VARINT = 0,
   BIT_64 = 1,
@@ -104,19 +107,19 @@ template <> struct WireTypeWrapper<unsigned long> {
 template <> struct WireTypeWrapper<unsigned long long> {
   constexpr static WireType type = WireType::VARINT;
 };
-template <> struct WireTypeWrapper<uint32> {
+template <> struct WireTypeWrapper<strong_uint32> {
   constexpr static WireType type = WireType::BIT_32;
   constexpr static int size = 32;
 };
-template <> struct WireTypeWrapper<int32> {
+template <> struct WireTypeWrapper<strong_int32> {
   constexpr static WireType type = WireType::BIT_32;
   constexpr static int size = 32;
 };
-template <> struct WireTypeWrapper<int64> {
+template <> struct WireTypeWrapper<strong_int64> {
   constexpr static WireType type = WireType::BIT_64;
   constexpr static int size = 64;
 };
-template <> struct WireTypeWrapper<uint64> {
+template <> struct WireTypeWrapper<strong_uint64> {
   constexpr static WireType type = WireType::BIT_64;
   constexpr static int size = 64;
 };
