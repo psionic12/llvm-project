@@ -36,8 +36,6 @@ template <std::size_t Size, bool LittleEndian = true> struct EndianHelper {
     return target + Size;
   }
 };
-// helper to avoid static_assert trigger directly
-template <typename> struct deferred_false : std::false_type {};
 // if the target platform is big endian, we should convert the byte order first
 template <std::size_t Size> struct EndianHelper<Size, false> {
   static uint8_t *Save(uint8_t *data, uint8_t *target) {
@@ -45,7 +43,7 @@ template <std::size_t Size> struct EndianHelper<Size, false> {
     return target + Size;
   }
   static uint8_t *SavePacked(uint8_t *data, uint8_t *target, std::size_t size) {
-    for (int i = 0; i < size; i++) {
+    for (std::size_t i = 0; i < size; i++) {
       ReverseEndian<Size>(data, target);
       target += Size;
     }
@@ -56,13 +54,15 @@ template <std::size_t Size> struct EndianHelper<Size, false> {
   }
 };
 template <typename T, typename Enable = void> struct Coder {
+  // helper to avoid static_assert trigger directly
+  template <typename> struct DeferredFalse : std::false_type {};
   static uint8_t *Write(const T value, uint8_t *ptr) {
-    static_assert(deferred_false<T>::value,
+    static_assert(DeferredFalse<T>::value,
                   "fall through default coder, unsupported type.");
     return nullptr;
   }
   static const uint8_t *Read(T &out, const uint8_t *ptr) {
-    static_assert(deferred_false<T>::value,
+    static_assert(DeferredFalse<T>::value,
                   "fall through default coder, unsupported type.");
     return nullptr;
   }
@@ -117,6 +117,9 @@ struct Coder<
     out = 0;
     return nullptr;
   }
+  static std::size_t Size(T value) {
+
+  }
 };
 // zig-zag varint encoder, used for signed arithmetic type
 template <typename T>
@@ -157,19 +160,19 @@ struct Coder<T, typename std::enable_if_t<
 template <typename T, std::size_t Size>
 struct Coder<T[Size], typename std::enable_if_t<WireTypeWrapper<T>::type ==
                                                 WireType::VARINT>> {
-  static uint8_t *Write(const T value[], uint8_t *ptr) {
+  static uint8_t *Write(const T (&value)[Size], uint8_t *ptr) {
     // write size
     ptr = Coder<decltype(Size)>::Write(Size, ptr);
 
-    for (int i = 0; i < Size; i++) {
+    for (std::size_t i = 0; i < Size; i++) {
       ptr = Coder<T>::Write(value[i], ptr);
     }
     return ptr;
   }
-  static const uint8_t *Read(T &out, const uint8_t *ptr) {
+  static const uint8_t *Read(T (&out)[Size], const uint8_t *ptr) {
     std::size_t size;
     ptr = Coder<decltype(Size)>::Read(size, ptr);
-    for (int i = 0; i < Size; i++) {
+    for (std::size_t i = 0; i < Size; i++) {
       ptr = Coder<T>::Read(out[i], ptr);
     }
     return ptr;
@@ -180,13 +183,13 @@ template <typename T, std::size_t Size>
 struct Coder<T[Size], typename std::enable_if_t<
                           WireTypeWrapper<T>::type == WireType::BIT_32 ||
                           WireTypeWrapper<T>::type == WireType::BIT_64>> {
-  static uint8_t *Write(const T value[], uint8_t *ptr) {
+  static uint8_t *Write(const T (&value)[Size], uint8_t *ptr) {
     // write size
     ptr = Coder<decltype(Size)>::Write(Size, ptr);
     return EndianHelper<sizeof(T), ME_LITTLE_ENDIAN>::SavePacked(value, ptr,
                                                                  Size);
   }
-  static const uint8_t *Read(T out[], const uint8_t *ptr) {
+  static const uint8_t *Read(T (&out)[Size], const uint8_t *ptr) {
     std::size_t size;
     ptr = Coder<decltype(Size)>::Read(size, ptr);
     return EndianHelper<sizeof(T), ME_LITTLE_ENDIAN>::LoadPacked(out, ptr,
@@ -198,7 +201,7 @@ template <typename T, typename... Ts>
 struct Coder<
     std::vector<T, Ts...>,
     typename std::enable_if_t<WireTypeWrapper<T>::type == WireType::VARINT>> {
-  static uint8_t *Write(const T &v, uint8_t *ptr) {
+  static uint8_t *Write(const std::vector<T> &v, uint8_t *ptr) {
     // write size
     ptr = Coder<decltype(v.size())>::Write(v.size(), ptr);
     for (auto i : v) {
@@ -206,10 +209,11 @@ struct Coder<
     }
     return ptr;
   }
-  static const uint8_t *Read(T &out, const uint8_t *ptr) {
+  static const uint8_t *Read(std::vector<T> &out, const uint8_t *ptr) {
     std::size_t size;
     ptr = Coder<decltype(size)>::Read(size, ptr);
-    for (auto i : out) {
+    out.resize(size);
+    for (auto& i : out) {
       ptr = Coder<T>::Read(i, ptr);
     }
     return ptr;
@@ -221,21 +225,22 @@ struct Coder<
     std::vector<T, Ts...>,
     typename std::enable_if_t<WireTypeWrapper<T>::type == WireType::BIT_32 ||
                               WireTypeWrapper<T>::type == WireType::BIT_64>> {
-  static uint8_t *Write(const T &v, uint8_t *ptr) {
+  static uint8_t *Write(const std::vector<T> &v, uint8_t *ptr) {
     ptr = Coder<decltype(v.size())>::Write(v.size(), ptr);
     return EndianHelper<sizeof(T), ME_LITTLE_ENDIAN>::SavePacked(v.data(), ptr,
                                                                  v.size());
   }
-  static const uint8_t *Read(T &out, const uint8_t *ptr) {
+  static const uint8_t *Read(std::vector<T> &out, const uint8_t *ptr) {
     std::size_t size;
     ptr = Coder<decltype(size)>::Read(size, ptr);
+    out.resize(size);
     return EndianHelper<sizeof(T), ME_LITTLE_ENDIAN>::LoadPacked(
         out.data(), ptr, out.size());
   }
 };
 // encoder for char[]
 template <std::size_t Size> struct Coder<char[Size]> {
-  static uint8_t *Write(const char value[], uint8_t *ptr) {
+  static uint8_t *Write(const char (&value)[Size], uint8_t *ptr) {
     // TODO add protobuf UTF8 validation for debugging
 
     // write size
@@ -244,7 +249,7 @@ template <std::size_t Size> struct Coder<char[Size]> {
     std::copy(value, value + Size, ptr);
     return ptr + Size;
   }
-  static const uint8_t *Read(char out[], const uint8_t *ptr) {
+  static const uint8_t *Read(char (&out)[Size], const uint8_t *ptr) {
     std::size_t size;
     ptr = Coder<decltype(size)>::Read(size, ptr);
     std::copy(ptr, ptr + Size, out);
@@ -261,6 +266,7 @@ template <> struct Coder<std::string> {
   static const uint8_t *Read(std::string &out, const uint8_t *ptr) {
     std::size_t size;
     ptr = Coder<decltype(size)>::Read(size, ptr);
+    out.resize(size);
     std::copy(ptr, ptr + size, &out[0]);
     return ptr + size;
   }
