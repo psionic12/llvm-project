@@ -1,6 +1,7 @@
 #ifndef LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_SERIALIZATION_BUILT_IN_TYPE_CODER_H_
 #define LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_SERIALIZATION_BUILT_IN_TYPE_CODER_H_
 #include "built_in_types_helper.h"
+#include "log2_floor_helper.h"
 #include "port.h"
 #include <cstdint>
 #include <string>
@@ -19,11 +20,11 @@ ReverseEndian(const uint8_t *s, uint8_t *t) {
 }
 // if the target platform is little endian, copy directly
 template <std::size_t Size, bool LittleEndian = true> struct EndianHelper {
-  static uint8_t *Save(uint8_t *data, uint8_t *target) {
+  static uint8_t *Save(const uint8_t *data, uint8_t *target) {
     std::copy(data, data + Size, target);
     return target + Size;
   }
-  static uint8_t *SavePacked(uint8_t *data, uint8_t *target, std::size_t size) {
+  static uint8_t *SavePacked(const uint8_t *data, uint8_t *target, std::size_t size) {
     std::copy(data, data + (Size * size), target);
     return target + (Size * size);
   }
@@ -31,8 +32,9 @@ template <std::size_t Size, bool LittleEndian = true> struct EndianHelper {
     std::copy(target, target + Size, data);
     return target + Size;
   }
-  static const uint8_t *LoadPacked(uint8_t *data, const uint8_t *target) {
-    std::copy(data, data + Size, target);
+  static const uint8_t *LoadPacked(uint8_t *data, const uint8_t *target,
+                                   std::size_t size) {
+    std::copy(target, target + (Size * size), data);
     return target + Size;
   }
 };
@@ -117,8 +119,16 @@ struct Coder<
     out = 0;
     return nullptr;
   }
-  static std::size_t Size(T value) {
-
+  static std::size_t Size(const T value) {
+    // same as VarintSizeXX in protobuf
+    std::size_t log2value = Log2FloorHelper::Log2Floor(value | 0x1);
+    // division to multiplication optimize
+    return static_cast<std::size_t>((log2value * 9 + 73) / 64);
+  }
+  // We need passing constexpr parameter feature!!!
+  template <std::size_t SIZE> static constexpr std::size_t ConstexprSize() {
+    constexpr std::size_t log2value = Log2FloorHelper::Log2FloorConstexpr(SIZE);
+    return static_cast<std::size_t>((log2value * 9 + 73) / 64);
   }
 };
 // zig-zag varint encoder, used for signed arithmetic type
@@ -127,10 +137,13 @@ struct Coder<
     T, typename std::enable_if_t<WireTypeWrapper<T>::type == WireType::VARINT &&
                                  std::is_signed<T>::value>> {
   typedef typename std::make_unsigned<T>::type UnsignedT;
+  static inline constexpr UnsignedT ZigZagValue(T value) {
+    return (static_cast<UnsignedT>(value) << 1) ^
+           static_cast<UnsignedT>(value >> 31);
+  }
   static uint8_t *Write(T value, uint8_t *ptr) {
     // convert to zig zag value
-    UnsignedT zig_zag_value = (static_cast<UnsignedT>(value) << 1) ^
-                              static_cast<UnsignedT>(value >> 31);
+    UnsignedT zig_zag_value = ZigZagValue(value);
     // now call to unsigned version of WriteWireTypeToArray
     return Coder<UnsignedT>::Write(zig_zag_value, ptr);
   }
@@ -140,6 +153,16 @@ struct Coder<
     // convert from zig zag value to normal value
     out = static_cast<T>((zig_zag_value >> 1) ^ (~(zig_zag_value & 1) + 1));
     return temp;
+  }
+  static std::size_t Size(const T value) {
+    // TODO efficiency problem, Size and Write/Read calculate zig zag value
+    // twice
+    UnsignedT zig_zag_value = ZigZagValue(value);
+    return Coder<UnsignedT>::Size(zig_zag_value);
+  }
+  template <std::size_t SIZE> static constexpr std::size_t ConstexprSize() {
+    constexpr UnsignedT zig_zag_value = ZigZagValue(SIZE);
+    return Coder<UnsignedT>::template ConstexprSize<zig_zag_value>();
   }
 };
 // fixed size encoder
@@ -155,45 +178,58 @@ struct Coder<T, typename std::enable_if_t<
     return EndianHelper<sizeof(T), ME_LITTLE_ENDIAN>::Load((uint8_t *)&out,
                                                            ptr);
   }
+  static constexpr std::size_t Size() { return sizeof(T); }
 };
 // encoder for arrays which element is varint
-template <typename T, std::size_t Size>
-struct Coder<T[Size], typename std::enable_if_t<WireTypeWrapper<T>::type ==
+template <typename T, std::size_t SIZE>
+struct Coder<T[SIZE], typename std::enable_if_t<WireTypeWrapper<T>::type ==
                                                 WireType::VARINT>> {
-  static uint8_t *Write(const T (&value)[Size], uint8_t *ptr) {
+  static uint8_t *Write(const T (&value)[SIZE], uint8_t *ptr) {
     // write size
-    ptr = Coder<decltype(Size)>::Write(Size, ptr);
+    ptr = Coder<decltype(SIZE)>::Write(SIZE, ptr);
 
-    for (std::size_t i = 0; i < Size; i++) {
+    for (std::size_t i = 0; i < SIZE; i++) {
       ptr = Coder<T>::Write(value[i], ptr);
     }
     return ptr;
   }
-  static const uint8_t *Read(T (&out)[Size], const uint8_t *ptr) {
+  static const uint8_t *Read(T (&out)[SIZE], const uint8_t *ptr) {
     std::size_t size;
-    ptr = Coder<decltype(Size)>::Read(size, ptr);
-    for (std::size_t i = 0; i < Size; i++) {
+    ptr = Coder<decltype(SIZE)>::Read(size, ptr);
+    for (std::size_t i = 0; i < SIZE; i++) {
       ptr = Coder<T>::Read(out[i], ptr);
     }
     return ptr;
   }
+  static std::size_t Size(const T (&value)[SIZE]) {
+    std::size_t total_size =
+        Coder<decltype(SIZE)>::template ConstexprSize<SIZE>();
+    for (std::size_t i = 0; i < SIZE; i++) {
+      total_size += Coder<T>::Size(value[i]);
+    }
+    return total_size;
+  }
 };
 // encoder for arrays which element is fixed
-template <typename T, std::size_t Size>
-struct Coder<T[Size], typename std::enable_if_t<
+template <typename T, std::size_t SIZE>
+struct Coder<T[SIZE], typename std::enable_if_t<
                           WireTypeWrapper<T>::type == WireType::BIT_32 ||
                           WireTypeWrapper<T>::type == WireType::BIT_64>> {
-  static uint8_t *Write(const T (&value)[Size], uint8_t *ptr) {
+  static uint8_t *Write(const T (&value)[SIZE], uint8_t *ptr) {
     // write size
-    ptr = Coder<decltype(Size)>::Write(Size, ptr);
-    return EndianHelper<sizeof(T), ME_LITTLE_ENDIAN>::SavePacked(value, ptr,
-                                                                 Size);
+    ptr = Coder<decltype(SIZE)>::Write(SIZE, ptr);
+    return EndianHelper<sizeof(T), ME_LITTLE_ENDIAN>::SavePacked(
+        (const uint8_t *)&value[0], ptr, SIZE);
   }
-  static const uint8_t *Read(T (&out)[Size], const uint8_t *ptr) {
+  static const uint8_t *Read(T (&out)[SIZE], const uint8_t *ptr) {
     std::size_t size;
-    ptr = Coder<decltype(Size)>::Read(size, ptr);
+    ptr = Coder<decltype(SIZE)>::Read(size, ptr);
     return EndianHelper<sizeof(T), ME_LITTLE_ENDIAN>::LoadPacked(out, ptr,
-                                                                 Size);
+                                                                 SIZE);
+  }
+  static constexpr std::size_t Size() {
+    return Coder<decltype(SIZE)>::template ConstexprSize<SIZE>() +
+           (SIZE * Coder<T>::Size());
   }
 };
 // encoder for vectors which element is varint
@@ -213,10 +249,18 @@ struct Coder<
     std::size_t size;
     ptr = Coder<decltype(size)>::Read(size, ptr);
     out.resize(size);
-    for (auto& i : out) {
+    for (auto &i : out) {
       ptr = Coder<T>::Read(i, ptr);
     }
     return ptr;
+  }
+  static std::size_t Size(const std::vector<T> &v) {
+    auto vector_size = v.size();
+    std::size_t total_size = Coder<decltype(vector_size)>::Size(vector_size);
+    for (auto i : v) {
+      total_size += Coder<T>::Size(i);
+    }
+    return total_size;
   }
 };
 // encoder for vectors which element is fixed
@@ -227,33 +271,42 @@ struct Coder<
                               WireTypeWrapper<T>::type == WireType::BIT_64>> {
   static uint8_t *Write(const std::vector<T> &v, uint8_t *ptr) {
     ptr = Coder<decltype(v.size())>::Write(v.size(), ptr);
-    return EndianHelper<sizeof(T), ME_LITTLE_ENDIAN>::SavePacked(v.data(), ptr,
-                                                                 v.size());
+    return EndianHelper<sizeof(T), ME_LITTLE_ENDIAN>::SavePacked(
+        (const uint8_t *)&v[0], ptr, v.size());
   }
   static const uint8_t *Read(std::vector<T> &out, const uint8_t *ptr) {
     std::size_t size;
     ptr = Coder<decltype(size)>::Read(size, ptr);
     out.resize(size);
     return EndianHelper<sizeof(T), ME_LITTLE_ENDIAN>::LoadPacked(
-        out.data(), ptr, out.size());
+        (uint8_t*)out.data(), ptr, out.size());
+  }
+  static std::size_t Size(const std::vector<T> &v) {
+    auto vector_size = v.size();
+    return Coder<decltype(vector_size)>::Size(vector_size) +
+           (vector_size * Coder<T>::Size());
   }
 };
 // encoder for char[]
-template <std::size_t Size> struct Coder<char[Size]> {
-  static uint8_t *Write(const char (&value)[Size], uint8_t *ptr) {
+template <std::size_t SIZE> struct Coder<char[SIZE]> {
+  static uint8_t *Write(const char (&value)[SIZE], uint8_t *ptr) {
     // TODO add protobuf UTF8 validation for debugging
 
     // write size
-    ptr = Coder<decltype(Size)>::Write(Size, ptr);
+    ptr = Coder<decltype(SIZE)>::Write(SIZE, ptr);
     // write data
-    std::copy(value, value + Size, ptr);
-    return ptr + Size;
+    std::copy(value, value + SIZE, ptr);
+    return ptr + SIZE;
   }
-  static const uint8_t *Read(char (&out)[Size], const uint8_t *ptr) {
+  static const uint8_t *Read(char (&out)[SIZE], const uint8_t *ptr) {
     std::size_t size;
     ptr = Coder<decltype(size)>::Read(size, ptr);
-    std::copy(ptr, ptr + Size, out);
-    return ptr + Size;
+    std::copy(ptr, ptr + SIZE, out);
+    return ptr + SIZE;
+  }
+  static constexpr std::size_t Size() {
+    return Coder<decltype(SIZE)>::template ConstexprSize<SIZE>() +
+           (SIZE * 1 /*char is considered a varint here, so use '1' directly*/);
   }
 };
 // coder for std::string
@@ -269,6 +322,10 @@ template <> struct Coder<std::string> {
     out.resize(size);
     std::copy(ptr, ptr + size, &out[0]);
     return ptr + size;
+  }
+  static std::size_t Size(const std::string &s) {
+    auto string_size = s.size();
+    return Coder<decltype(string_size)>::Size(string_size) + s.size();
   }
 };
 } // namespace serialization
