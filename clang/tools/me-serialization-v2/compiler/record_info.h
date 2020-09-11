@@ -15,7 +15,6 @@ enum EntryKind {
   TypeUint32,
   TypeInt64,
   TypeUint64,
-  TypePointer,
   TypeUnknown,
 };
 

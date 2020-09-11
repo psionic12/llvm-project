@@ -5,14 +5,10 @@
 #include <cstdint>
 namespace me {
 namespace serialization {
-constexpr inline uint32_t MakeTag(int field_number, WireType type) {
-  return static_cast<uint32_t>((static_cast<uint32_t>(field_number) << 3) |
-                               static_cast<uint32_t>(type));
-}
-inline uint8_t *WriteTagToArray(int field_number, WireType type,
-                                uint8_t *target) {
-  auto tag = MakeTag(field_number, type);
-  return Coder<decltype(tag)>::Write(tag, target);
+constexpr inline uint8_t MakeTag(bool rtti, Graininess type) {
+  uint8_t tag = static_cast<uint8_t>(type);
+  tag |= static_cast<uint8_t>(rtti) << 7;
+  return tag;
 }
 } // namespace serialization
 } // namespace me

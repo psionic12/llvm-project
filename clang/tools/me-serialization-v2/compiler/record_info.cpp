@@ -205,6 +205,7 @@ void EntryInfo::ToCpp(std::fstream &Out, EntryIndexer::EntryMap &EntryMap) {
     Out << "if (" << EntryName.str() << ".size() > 0) {\n";
   }
 
+
   Out << "}\n";
 }
 void RecordInfo::ToCpp(std::fstream &Out, EntryIndexer &Indexer) {
@@ -213,7 +214,7 @@ void RecordInfo::ToCpp(std::fstream &Out, EntryIndexer &Indexer) {
   if (Pure)
     return;
 
-  Out << "std::vector<char> " << FullName << "::Serialize() {\n";
+  Out << "std::string " << FullName << "::Serialize() {\n";
   auto &EntryMap = Indexer.getEntryMap(FullName);
   for (auto &Entry : Entries) {
     Entry.ToCpp(Out, EntryMap);

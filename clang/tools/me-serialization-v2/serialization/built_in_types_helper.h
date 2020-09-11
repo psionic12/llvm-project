@@ -1,7 +1,9 @@
 #ifndef LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_SERIALIZATION_BUILT_IN_TYPES_HELPER_H_
 #define LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_SERIALIZATION_BUILT_IN_TYPES_HELPER_H_
 #include <cstdint>
+#include <string>
 #include <type_traits>
+#include <vector>
 namespace me {
 template <typename Test, template <typename...> class Ref>
 struct is_specialization : std::false_type {};
@@ -42,87 +44,64 @@ namespace serialization {
                                                                                \
   private:                                                                     \
     _base value;                                                               \
-  };
+  }
 // strong typedef for xintxx_t, used to call fixed type size coder.
 // no 8 and 16 bit int yet, because protobuf do not support that.
 // this is used for serialization compiler to treat xintxx_t,
 // do not use it in you code.
-STRONG_TYPEDEF(uint32_t, strong_uint32)
-STRONG_TYPEDEF(uint64_t, strong_uint64)
-STRONG_TYPEDEF(int32_t, strong_int32)
-STRONG_TYPEDEF(int64_t, strong_int64)
-enum class WireType : int {
-  VARINT = 0,
-  BIT_64 = 1,
-  LENGTH_DELIMITED = 2,
-  BIT_32 = 5,
-};
+STRONG_TYPEDEF(uint8_t, strong_uint8);
+STRONG_TYPEDEF(int8_t, strong_int8);
+STRONG_TYPEDEF(uint16_t, strong_uint16);
+STRONG_TYPEDEF(int16_t, strong_int16);
+STRONG_TYPEDEF(uint32_t, strong_uint32);
+STRONG_TYPEDEF(int32_t, strong_int32);
+STRONG_TYPEDEF(uint64_t, strong_uint64);
+STRONG_TYPEDEF(int64_t, strong_int64);
 
-template <typename T> struct WireTypeWrapper {};
-template <> struct WireTypeWrapper<bool> {
-  constexpr static WireType type = WireType::VARINT;
+enum class Graininess : int {
+  BIT_8 = 0,
+  BIT_16 = 1,
+  BIT_32 = 2,
+  BIT_64 = 3,
+  VARINT = 4,
+  LENGTH_DELIMITED = 5,
 };
-template <> struct WireTypeWrapper<char> {
-  constexpr static WireType type = WireType::VARINT;
+template <typename T> struct GraininessWrapper {};
+#define GraininessDef(_type, _graininess)                                      \
+  template <> struct GraininessWrapper<_type> {                                \
+    constexpr static Graininess type = _graininess;                            \
+  }
+GraininessDef(bool, Graininess::VARINT);
+GraininessDef(char, Graininess::BIT_8);
+GraininessDef(unsigned char, Graininess::BIT_8);
+GraininessDef(signed char, Graininess::BIT_8);
+GraininessDef(float, Graininess::BIT_32);
+GraininessDef(double, Graininess::BIT_64);
+GraininessDef(long double, Graininess::BIT_64);
+GraininessDef(short, Graininess::VARINT);
+GraininessDef(int, Graininess::VARINT);
+GraininessDef(long, Graininess::VARINT);
+GraininessDef(long long, Graininess::VARINT);
+GraininessDef(unsigned short, Graininess::VARINT);
+GraininessDef(unsigned int, Graininess::VARINT);
+GraininessDef(unsigned long, Graininess::VARINT);
+GraininessDef(unsigned long long, Graininess::VARINT);
+GraininessDef(strong_uint8, Graininess::BIT_8);
+GraininessDef(strong_int8, Graininess::BIT_8);
+GraininessDef(strong_uint16, Graininess::BIT_16);
+GraininessDef(strong_int16, Graininess::BIT_16);
+GraininessDef(strong_uint32, Graininess::BIT_32);
+GraininessDef(strong_int32, Graininess::BIT_32);
+GraininessDef(strong_int64, Graininess::BIT_64);
+GraininessDef(strong_uint64, Graininess::BIT_64);
+template <typename T, std::size_t SIZE> struct GraininessWrapper<T[SIZE]> {
+  constexpr static Graininess type = Graininess::LENGTH_DELIMITED;
 };
-template <> struct WireTypeWrapper<unsigned char> {
-  constexpr static WireType type = WireType::VARINT;
+template <typename T, typename... Ts>
+struct GraininessWrapper<std::vector<T, Ts...>> {
+  constexpr static Graininess type = Graininess::LENGTH_DELIMITED;
 };
-template <> struct WireTypeWrapper<signed char> {
-  constexpr static WireType type = WireType::VARINT;
-};
-template <> struct WireTypeWrapper<float> {
-  constexpr static WireType type = WireType::BIT_32;
-  constexpr static int size = 32;
-};
-template <> struct WireTypeWrapper<double> {
-  constexpr static WireType type = WireType::BIT_64;
-  constexpr static int size = 64;
-};
-template <> struct WireTypeWrapper<long double> {
-  constexpr static WireType type = WireType::BIT_64;
-  constexpr static int size = 64;
-};
-template <> struct WireTypeWrapper<short> {
-  constexpr static WireType type = WireType::VARINT;
-};
-template <> struct WireTypeWrapper<int> {
-  constexpr static WireType type = WireType::VARINT;
-};
-template <> struct WireTypeWrapper<long> {
-  constexpr static WireType type = WireType::VARINT;
-};
-template <> struct WireTypeWrapper<long long> {
-  constexpr static WireType type = WireType::VARINT;
-};
-template <> struct WireTypeWrapper<unsigned short> {
-  constexpr static WireType type = WireType::VARINT;
-};
-template <> struct WireTypeWrapper<unsigned int> {
-  constexpr static WireType type = WireType::VARINT;
-};
-template <> struct WireTypeWrapper<unsigned long> {
-  constexpr static WireType type = WireType::VARINT;
-};
-template <> struct WireTypeWrapper<unsigned long long> {
-  constexpr static WireType type = WireType::VARINT;
-};
-template <> struct WireTypeWrapper<strong_uint32> {
-  constexpr static WireType type = WireType::BIT_32;
-  constexpr static int size = 32;
-};
-template <> struct WireTypeWrapper<strong_int32> {
-  constexpr static WireType type = WireType::BIT_32;
-  constexpr static int size = 32;
-};
-template <> struct WireTypeWrapper<strong_int64> {
-  constexpr static WireType type = WireType::BIT_64;
-  constexpr static int size = 64;
-};
-template <> struct WireTypeWrapper<strong_uint64> {
-  constexpr static WireType type = WireType::BIT_64;
-  constexpr static int size = 64;
-};
+GraininessDef(std::string, Graininess::LENGTH_DELIMITED);
 } // namespace serialization
 } // namespace me
 #endif // LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_SERIALIZATION_BUILT_IN_TYPES_HELPER_H_

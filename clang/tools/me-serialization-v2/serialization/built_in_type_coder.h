@@ -3,6 +3,7 @@
 #include "built_in_types_helper.h"
 #include "log2_floor_helper.h"
 #include "port.h"
+#include <memory>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -24,7 +25,8 @@ template <std::size_t Size, bool LittleEndian = true> struct EndianHelper {
     std::copy(data, data + Size, target);
     return target + Size;
   }
-  static uint8_t *SavePacked(const uint8_t *data, uint8_t *target, std::size_t size) {
+  static uint8_t *SavePacked(const uint8_t *data, uint8_t *target,
+                             std::size_t size) {
     std::copy(data, data + (Size * size), target);
     return target + (Size * size);
   }
@@ -35,7 +37,7 @@ template <std::size_t Size, bool LittleEndian = true> struct EndianHelper {
   static const uint8_t *LoadPacked(uint8_t *data, const uint8_t *target,
                                    std::size_t size) {
     std::copy(target, target + (Size * size), data);
-    return target + Size;
+    return target + (Size * size);
   }
 };
 // if the target platform is big endian, we should convert the byte order first
@@ -55,9 +57,9 @@ template <std::size_t Size> struct EndianHelper<Size, false> {
     ReverseEndian<Size>(target, data);
   }
 };
+// helper to avoid static_assert trigger directly
+template <typename> struct DeferredFalse : std::false_type {};
 template <typename T, typename Enable = void> struct Coder {
-  // helper to avoid static_assert trigger directly
-  template <typename> struct DeferredFalse : std::false_type {};
   static uint8_t *Write(const T value, uint8_t *ptr) {
     static_assert(DeferredFalse<T>::value,
                   "fall through default coder, unsupported type.");
@@ -68,12 +70,65 @@ template <typename T, typename Enable = void> struct Coder {
                   "fall through default coder, unsupported type.");
     return nullptr;
   }
+  static std::size_t Size(const T value) {
+    static_assert(DeferredFalse<T>::value,
+                  "fall through default coder, unsupported type.");
+    return 0;
+  }
+};
+// pointers are not supported
+template <typename T> struct Coder<T *> {
+  static uint8_t *Write(const T value, uint8_t *ptr) {
+    static_assert(
+        DeferredFalse<T>::value,
+        "pointer is not supported, serializable should owns something, not "
+        "pointers something, use std::unique ptr instead.");
+    return nullptr;
+  }
+  static const uint8_t *Read(T &out, const uint8_t *ptr) {
+    static_assert(
+        DeferredFalse<T>::value,
+        "pointer is not supported, serializable should owns something, not "
+        "pointers something, use std::unique ptr instead.");
+    return nullptr;
+  }
+  static std::size_t Size(const T value) {
+    static_assert(
+        DeferredFalse<T>::value,
+        "pointer is not supported, serializable should owns something, not "
+        "pointers something, use std::unique ptr instead.");
+    return 0;
+  }
+};
+// shared_ptrs are not supported
+template <typename T> struct Coder<std::shared_ptr<T>> {
+  static uint8_t *Write(const T value, uint8_t *ptr) {
+    static_assert(
+        DeferredFalse<T>::value,
+        "shared_ptr is not supported, serializable should owns something, not "
+        "shares something.");
+    return nullptr;
+  }
+  static const uint8_t *Read(T &out, const uint8_t *ptr) {
+    static_assert(
+        DeferredFalse<T>::value,
+        "shared_ptr is not supported, serializable should owns something, not "
+        "shares something.");
+    return nullptr;
+  }
+  static std::size_t Size(const T value) {
+    static_assert(
+        DeferredFalse<T>::value,
+        "shared_ptr is not supported, serializable should owns something, not "
+        "shares something.");
+    return 0;
+  }
 };
 // varint coder, used for unsigned arithmetic type
 template <typename T>
-struct Coder<
-    T, typename std::enable_if_t<WireTypeWrapper<T>::type == WireType::VARINT &&
-                                 std::is_unsigned<T>::value>> {
+struct Coder<T, typename std::enable_if_t<GraininessWrapper<T>::type ==
+                                              Graininess::VARINT &&
+                                          std::is_unsigned<T>::value>> {
   static uint8_t *Write(T value, uint8_t *ptr) {
     if (value < 0x80) {
       ptr[0] = static_cast<uint8_t>(value);
@@ -133,9 +188,9 @@ struct Coder<
 };
 // zig-zag varint encoder, used for signed arithmetic type
 template <typename T>
-struct Coder<
-    T, typename std::enable_if_t<WireTypeWrapper<T>::type == WireType::VARINT &&
-                                 std::is_signed<T>::value>> {
+struct Coder<T, typename std::enable_if_t<GraininessWrapper<T>::type ==
+                                              Graininess::VARINT &&
+                                          std::is_signed<T>::value>> {
   typedef typename std::make_unsigned<T>::type UnsignedT;
   static inline constexpr UnsignedT ZigZagValue(T value) {
     return (static_cast<UnsignedT>(value) << 1) ^
@@ -144,7 +199,7 @@ struct Coder<
   static uint8_t *Write(T value, uint8_t *ptr) {
     // convert to zig zag value
     UnsignedT zig_zag_value = ZigZagValue(value);
-    // now call to unsigned version of WriteWireTypeToArray
+    // now call to unsigned version of WriteGraininessToArray
     return Coder<UnsignedT>::Write(zig_zag_value, ptr);
   }
   static const uint8_t *Read(T &out, const uint8_t *ptr) {
@@ -167,9 +222,8 @@ struct Coder<
 };
 // fixed size encoder
 template <typename T>
-struct Coder<T, typename std::enable_if_t<
-                    WireTypeWrapper<T>::type == WireType::BIT_32 ||
-                    WireTypeWrapper<T>::type == WireType::BIT_64>> {
+    struct Coder < T,
+    typename std::enable_if_t<GraininessWrapper<T>::type<Graininess::VARINT>> {
   static uint8_t *Write(T value, uint8_t *ptr) {
     return EndianHelper<sizeof(T), ME_LITTLE_ENDIAN>::Save((uint8_t *)&value,
                                                            ptr);
@@ -182,8 +236,8 @@ struct Coder<T, typename std::enable_if_t<
 };
 // encoder for arrays which element is varint
 template <typename T, std::size_t SIZE>
-struct Coder<T[SIZE], typename std::enable_if_t<WireTypeWrapper<T>::type ==
-                                                WireType::VARINT>> {
+struct Coder<T[SIZE], typename std::enable_if_t<GraininessWrapper<T>::type ==
+                                                Graininess::VARINT>> {
   static uint8_t *Write(const T (&value)[SIZE], uint8_t *ptr) {
     // write size
     ptr = Coder<decltype(SIZE)>::Write(SIZE, ptr);
@@ -210,11 +264,20 @@ struct Coder<T[SIZE], typename std::enable_if_t<WireTypeWrapper<T>::type ==
     return total_size;
   }
 };
+// unique_ptr with a non-polymorphic Type
+template <typename T, typename ...Ts>
+struct Coder<std::unique_ptr<T, Ts...>, typename std::enable_if_t<!std::is_polymorphic<T>::value>> {
+
+};
+// unique_ptr with a polymorphic Type
+template <typename T, typename ...Ts>
+struct Coder<std::unique_ptr<T, Ts...>, typename std::enable_if_t<std::is_polymorphic<T>::value>> {
+
+};
 // encoder for arrays which element is fixed
 template <typename T, std::size_t SIZE>
-struct Coder<T[SIZE], typename std::enable_if_t<
-                          WireTypeWrapper<T>::type == WireType::BIT_32 ||
-                          WireTypeWrapper<T>::type == WireType::BIT_64>> {
+    struct Coder < T[SIZE],
+    typename std::enable_if_t<GraininessWrapper<T>::type<Graininess::VARINT>> {
   static uint8_t *Write(const T (&value)[SIZE], uint8_t *ptr) {
     // write size
     ptr = Coder<decltype(SIZE)>::Write(SIZE, ptr);
@@ -224,8 +287,8 @@ struct Coder<T[SIZE], typename std::enable_if_t<
   static const uint8_t *Read(T (&out)[SIZE], const uint8_t *ptr) {
     std::size_t size;
     ptr = Coder<decltype(SIZE)>::Read(size, ptr);
-    return EndianHelper<sizeof(T), ME_LITTLE_ENDIAN>::LoadPacked(out, ptr,
-                                                                 SIZE);
+    return EndianHelper<sizeof(T), ME_LITTLE_ENDIAN>::LoadPacked((uint8_t *)out,
+                                                                 ptr, SIZE);
   }
   static constexpr std::size_t Size() {
     return Coder<decltype(SIZE)>::template ConstexprSize<SIZE>() +
@@ -234,9 +297,9 @@ struct Coder<T[SIZE], typename std::enable_if_t<
 };
 // encoder for vectors which element is varint
 template <typename T, typename... Ts>
-struct Coder<
-    std::vector<T, Ts...>,
-    typename std::enable_if_t<WireTypeWrapper<T>::type == WireType::VARINT>> {
+struct Coder<std::vector<T, Ts...>,
+             typename std::enable_if_t<GraininessWrapper<T>::type ==
+                                       Graininess::VARINT>> {
   static uint8_t *Write(const std::vector<T> &v, uint8_t *ptr) {
     // write size
     ptr = Coder<decltype(v.size())>::Write(v.size(), ptr);
@@ -265,10 +328,8 @@ struct Coder<
 };
 // encoder for vectors which element is fixed
 template <typename T, typename... Ts>
-struct Coder<
-    std::vector<T, Ts...>,
-    typename std::enable_if_t<WireTypeWrapper<T>::type == WireType::BIT_32 ||
-                              WireTypeWrapper<T>::type == WireType::BIT_64>> {
+    struct Coder < std::vector<T, Ts...>,
+    typename std::enable_if_t<GraininessWrapper<T>::type<Graininess::VARINT>> {
   static uint8_t *Write(const std::vector<T> &v, uint8_t *ptr) {
     ptr = Coder<decltype(v.size())>::Write(v.size(), ptr);
     return EndianHelper<sizeof(T), ME_LITTLE_ENDIAN>::SavePacked(
@@ -279,34 +340,12 @@ struct Coder<
     ptr = Coder<decltype(size)>::Read(size, ptr);
     out.resize(size);
     return EndianHelper<sizeof(T), ME_LITTLE_ENDIAN>::LoadPacked(
-        (uint8_t*)out.data(), ptr, out.size());
+        (uint8_t *)out.data(), ptr, out.size());
   }
   static std::size_t Size(const std::vector<T> &v) {
     auto vector_size = v.size();
     return Coder<decltype(vector_size)>::Size(vector_size) +
            (vector_size * Coder<T>::Size());
-  }
-};
-// encoder for char[]
-template <std::size_t SIZE> struct Coder<char[SIZE]> {
-  static uint8_t *Write(const char (&value)[SIZE], uint8_t *ptr) {
-    // TODO add protobuf UTF8 validation for debugging
-
-    // write size
-    ptr = Coder<decltype(SIZE)>::Write(SIZE, ptr);
-    // write data
-    std::copy(value, value + SIZE, ptr);
-    return ptr + SIZE;
-  }
-  static const uint8_t *Read(char (&out)[SIZE], const uint8_t *ptr) {
-    std::size_t size;
-    ptr = Coder<decltype(size)>::Read(size, ptr);
-    std::copy(ptr, ptr + SIZE, out);
-    return ptr + SIZE;
-  }
-  static constexpr std::size_t Size() {
-    return Coder<decltype(SIZE)>::template ConstexprSize<SIZE>() +
-           (SIZE * 1 /*char is considered a varint here, so use '1' directly*/);
   }
 };
 // coder for std::string
