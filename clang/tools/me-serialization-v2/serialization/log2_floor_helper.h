@@ -27,7 +27,7 @@ struct Log2FloorHelper {
                           unsigned int>
   Log2Floor(T value) {
     unsigned long where;
-    _BitScanReverse64(&where, n);
+    _BitScanReverse64(&where, value);
     return where;
   }
   template <typename T>
@@ -35,7 +35,7 @@ struct Log2FloorHelper {
                           unsigned int>
   Log2Floor(T value) {
     unsigned long where;
-    _BitScanReverse(&where, n);
+    _BitScanReverse(&where, value);
     return where;
   }
 #else

@@ -3,9 +3,11 @@
 #include "built_in_types_helper.h"
 #include "log2_floor_helper.h"
 #include "port.h"
-#include <memory>
 #include <cstdint>
+#include <memory>
 #include <string>
+#include <typeindex>
+#include <unordered_map>
 #include <vector>
 namespace me {
 namespace serialization {
@@ -76,6 +78,28 @@ template <typename T, typename Enable = void> struct Coder {
     return 0;
   }
 };
+
+struct CoderWrapper {
+  static std::unordered_map<std::size_t, std::unique_ptr<CoderWrapper>>
+      IdToCoderMap;
+  static std::unordered_map<std::type_index, std::size_t> CppIdToIdMap;
+  virtual uint8_t *Write(const void *value, uint8_t *ptr) = 0;
+  virtual const uint8_t *Read(void *out, const uint8_t *ptr) = 0;
+  virtual std::size_t Size(const void *value) = 0;
+};
+
+template <typename T> struct CoderWrapperImpl : public CoderWrapper {
+  uint8_t *Write(const void *value, uint8_t *ptr) override {
+    return Coder<T>::Write(*reinterpret_cast<T *>(value), ptr);
+  }
+  const uint8_t *Read(void *out, const uint8_t *ptr) override {
+    return Coder<T>::Read(*reinterpret_cast<T *>(value), ptr);
+  }
+  size_t Size(const void *value) override {
+    return Coder<T>::Size(*reinterpret_cast<T *>(value), ptr);
+  }
+};
+
 // pointers are not supported
 template <typename T> struct Coder<T *> {
   static uint8_t *Write(const T value, uint8_t *ptr) {
@@ -232,7 +256,29 @@ template <typename T>
     return EndianHelper<sizeof(T), ME_LITTLE_ENDIAN>::Load((uint8_t *)&out,
                                                            ptr);
   }
-  static constexpr std::size_t Size() { return sizeof(T); }
+  static constexpr std::size_t Size(T value) { return sizeof(T); }
+};
+// unique_ptr Type
+template <typename T, typename... Ts> struct Coder<std::unique_ptr<T, Ts...>> {
+  static uint8_t *Write(const std::unique_ptr<T, Ts...> unique_ptr,
+                        uint8_t *ptr) {
+    // TODO do I need to check the existence?
+    ptr = WriteRaw(CoderWrapper::CppIdToIdMap[typeid(T)]);
+    ptr = WriteRaw(*unique_ptr);
+    return ptr;
+  }
+  static const uint8_t *Read(std::unique_ptr<T, Ts...> &unique_ptr,
+                             const uint8_t *ptr) {
+    std::size_t id;
+    ptr = ReadRaw(id, ptr);
+    void *out;
+    ptr = CoderWrapper::IdToCoderMap[id]->Read(out, ptr);
+    unique_ptr.reset(reinterpret_cast<T>(out));
+    return ptr;
+  }
+  static std::size_t Size(const std::unique_ptr<T, Ts...> unique_ptr) {
+    return 0;
+  }
 };
 // encoder for arrays which element is varint
 template <typename T, std::size_t SIZE>
@@ -264,16 +310,6 @@ struct Coder<T[SIZE], typename std::enable_if_t<GraininessWrapper<T>::type ==
     return total_size;
   }
 };
-// unique_ptr with a non-polymorphic Type
-template <typename T, typename ...Ts>
-struct Coder<std::unique_ptr<T, Ts...>, typename std::enable_if_t<!std::is_polymorphic<T>::value>> {
-
-};
-// unique_ptr with a polymorphic Type
-template <typename T, typename ...Ts>
-struct Coder<std::unique_ptr<T, Ts...>, typename std::enable_if_t<std::is_polymorphic<T>::value>> {
-
-};
 // encoder for arrays which element is fixed
 template <typename T, std::size_t SIZE>
     struct Coder < T[SIZE],
@@ -290,9 +326,9 @@ template <typename T, std::size_t SIZE>
     return EndianHelper<sizeof(T), ME_LITTLE_ENDIAN>::LoadPacked((uint8_t *)out,
                                                                  ptr, SIZE);
   }
-  static constexpr std::size_t Size() {
+  static constexpr std::size_t Size(const T (&value)[SIZE]) {
     return Coder<decltype(SIZE)>::template ConstexprSize<SIZE>() +
-           (SIZE * Coder<T>::Size());
+           (SIZE * Coder<T>::Size(value[0]));
   }
 };
 // encoder for vectors which element is varint
@@ -345,7 +381,7 @@ template <typename T, typename... Ts>
   static std::size_t Size(const std::vector<T> &v) {
     auto vector_size = v.size();
     return Coder<decltype(vector_size)>::Size(vector_size) +
-           (vector_size * Coder<T>::Size());
+           (vector_size * Coder<T>::Size(v));
   }
 };
 // coder for std::string
@@ -367,6 +403,29 @@ template <> struct Coder<std::string> {
     return Coder<decltype(string_size)>::Size(string_size) + s.size();
   }
 };
+template <typename T> static uint8_t *WriteRaw(const T value, uint8_t *ptr) {
+  return Coder<T>::Write(value, ptr);
+}
+template <typename T>
+static const uint8_t *ReadRaw(T &out, const uint8_t *ptr) {
+  return Coder<T>::Read(out, ptr);
+}
+template <typename T> static std::size_t SizeRaw(const T value) {
+  return Coder<T>::Size(value);
+}
+template <typename T, std::size_t SIZE>
+static uint8_t *WriteRaw(const T (&value)[SIZE], uint8_t *ptr) {
+  return Coder<T[SIZE]>::Write(value, ptr);
+}
+template <typename T, std::size_t SIZE>
+static const uint8_t *ReadRaw(T (&out)[SIZE], const uint8_t *ptr) {
+  return Coder<T[SIZE]>::Read(out, ptr);
+}
+template <typename T, std::size_t SIZE>
+static constexpr std::size_t SizeRaw(const T (&value)[SIZE]) {
+  return Coder<T[SIZE]>::Size(value);
+}
+
 } // namespace serialization
 } // namespace me
 

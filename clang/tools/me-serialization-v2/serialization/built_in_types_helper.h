@@ -1,6 +1,7 @@
 #ifndef LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_SERIALIZATION_BUILT_IN_TYPES_HELPER_H_
 #define LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_SERIALIZATION_BUILT_IN_TYPES_HELPER_H_
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -66,7 +67,9 @@ enum class Graininess : int {
   VARINT = 4,
   LENGTH_DELIMITED = 5,
 };
-template <typename T> struct GraininessWrapper {};
+template <typename T> struct GraininessWrapper {
+  constexpr static Graininess type = Graininess::LENGTH_DELIMITED;
+};
 #define GraininessDef(_type, _graininess)                                      \
   template <> struct GraininessWrapper<_type> {                                \
     constexpr static Graininess type = _graininess;                            \
@@ -94,14 +97,14 @@ GraininessDef(strong_uint32, Graininess::BIT_32);
 GraininessDef(strong_int32, Graininess::BIT_32);
 GraininessDef(strong_int64, Graininess::BIT_64);
 GraininessDef(strong_uint64, Graininess::BIT_64);
-template <typename T, std::size_t SIZE> struct GraininessWrapper<T[SIZE]> {
-  constexpr static Graininess type = Graininess::LENGTH_DELIMITED;
+template <typename T>
+struct GraininessWrapper<std::shared_ptr<T>> {
+  // do not support shard_ptr
 };
-template <typename T, typename... Ts>
-struct GraininessWrapper<std::vector<T, Ts...>> {
-  constexpr static Graininess type = Graininess::LENGTH_DELIMITED;
+template <typename T>
+struct GraininessWrapper<T*> {
+  // do not support pointers
 };
-GraininessDef(std::string, Graininess::LENGTH_DELIMITED);
 } // namespace serialization
 } // namespace me
 #endif // LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_SERIALIZATION_BUILT_IN_TYPES_HELPER_H_
