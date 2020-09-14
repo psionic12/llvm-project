@@ -5,7 +5,7 @@
 #include <cstdint>
 namespace me {
 namespace serialization {
-constexpr inline uint8_t MakeTag(bool rtti, Graininess type) {
+inline constexpr uint8_t MakeTag(bool rtti, Graininess type) {
   uint8_t tag = static_cast<uint8_t>(type);
   tag |= static_cast<uint8_t>(rtti) << 7;
   return tag;
@@ -16,17 +16,18 @@ constexpr Graininess GetGraininess(uint8_t tag) {
 constexpr bool HasRtti(uint8_t tag) { return tag >> 7; }
 // integral types
 template <typename T>
-std::enable_if_t<std::is_integral_v<T>, bool> NotEmpty(const T value) {
+std::enable_if_t<std::is_integral<T>::value, bool> NotEmpty(const T& value) {
   return (value != 0);
 }
 // floating point types
 template <typename T>
-std::enable_if_t<std::is_floating_point_v<T>, bool> NotEmpty(const T value) {
+std::enable_if_t<std::is_floating_point<T>::value, bool>
+NotEmpty(const T& value) {
   return (value < 0 || value > 0);
 }
 // vector type
 template <typename T, typename... TS>
-bool NotEmpty(const std::vector<T, TS...> value) {
+bool NotEmpty(const std::vector<T, TS...>& value) {
   return !value.empty();
 }
 // array type
@@ -36,13 +37,13 @@ constexpr bool NotEmpty(const T (&value)[SIZE]) {
 }
 // unique_ptr type
 template <typename T, typename... TS>
-bool NotEmpty(const std::unique_ptr<T, TS...> unique_ptr) {
+bool NotEmpty(const std::unique_ptr<T, TS...>& unique_ptr) {
   return unique_ptr != nullptr;
 }
 // std::string type
-bool NotEmpty(const std::string s) { return !s.empty(); }
+inline bool NotEmpty(const std::string& s) { return !s.empty(); }
 template <typename T>
-uint8_t *WriteField(const uint32_t index, const T value, uint8_t *ptr) {
+uint8_t *WriteField(const uint32_t index, const T& value, uint8_t *ptr) {
   if (NotEmpty(value)) {
     ptr = Coder<uint32_t>::Write(index, ptr);
     constexpr uint8_t tag = MakeTag(false, GraininessWrapper<T>::type);
@@ -63,7 +64,7 @@ uint8_t *WriteField(const int index, const T (&value)[SIZE], uint8_t *ptr) {
 
 // unique_ptr type
 template <typename T, typename... TS>
-uint8_t *WriteField(const int index, const std::unique_ptr<T, TS...> value,
+uint8_t *WriteField(const int index, const std::unique_ptr<T, TS...>& value,
                     uint8_t *ptr) {
   if (value != nullptr) {
     ptr = Coder<uint32_t>::Write(index, ptr);
@@ -71,14 +72,11 @@ uint8_t *WriteField(const int index, const std::unique_ptr<T, TS...> value,
     ptr = Coder<uint8_t>::Write(tag, ptr);
     ptr = WriteRaw(value, ptr);
   }
+  return ptr;
 }
 
-template <typename T> uint8_t *ReadField(T &out, const uint8_t *ptr) {}
-template <typename T, std::size_t SIZE>
-uint8_t *ReadField(T (&out)[SIZE], const uint8_t *ptr) {}
-
 template <std::uint32_t INDEX, typename T>
-constexpr std::size_t FieldSize(const T value) {
+constexpr std::size_t FieldSize(const T& value) {
   if (NotEmpty(value)) {
     return Coder<uint32_t>::ConstexprSize<INDEX>() // index size
            + 1                                     // tag size
@@ -99,6 +97,40 @@ inline const uint8_t *SkipVarint(const uint8_t *ptr) {
       ptr += (i + 1);
       break;
     }
+  }
+  return ptr;
+}
+inline const uint8_t *SkipUnknown(uint8_t tag, const uint8_t *ptr) {
+  if (HasRtti(tag)) {
+    ptr = SkipVarint(ptr);
+  }
+  switch (GetGraininess(tag)) {
+  case Graininess::BIT_8: {
+    ptr += 1;
+    break;
+  }
+  case Graininess::BIT_16: {
+    ptr += 2;
+    break;
+  }
+  case Graininess::BIT_32: {
+    ptr += 4;
+    break;
+  }
+  case Graininess::BIT_64: {
+    ptr += 8;
+    break;
+  }
+  case Graininess::VARINT: {
+    ptr = SkipVarint(ptr);
+    break;
+  }
+  case Graininess::LENGTH_DELIMITED: {
+    uint64_t size;
+    ptr = ReadRaw(size, ptr);
+    ptr += size;
+    break;
+  }
   }
   return ptr;
 }

@@ -1,3 +1,2 @@
 add_subdirectory(compiler)
-add_subdirectory(serialization)
 add_subdirectory(test)

@@ -1,6 +1,7 @@
 #ifndef LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_SERIALIZATION_BUILT_IN_TYPE_CODER_H_
 #define LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_SERIALIZATION_BUILT_IN_TYPE_CODER_H_
 #include "built_in_types_helper.h"
+#include "endianness_helper.h"
 #include "log2_floor_helper.h"
 #include "port.h"
 #include <cstdint>
@@ -11,58 +12,10 @@
 #include <vector>
 namespace me {
 namespace serialization {
-template <std::size_t Size, std::size_t Index = 0>
-std::enable_if_t<(Size <= 1) || (Index >= Size), void>
-ReverseEndian(const uint8_t *s, uint8_t *t) {}
-
-template <std::size_t Size, std::size_t Index = 0>
-std::enable_if_t<(Size > 1) && (Index < Size), void>
-ReverseEndian(const uint8_t *s, uint8_t *t) {
-  t[Index] = s[Size - 1 - Index];
-  ReverseEndian<Size, Index + 1>(t, s);
-}
-// if the target platform is little endian, copy directly
-template <std::size_t Size, bool LittleEndian = true> struct EndianHelper {
-  static uint8_t *Save(const uint8_t *data, uint8_t *target) {
-    std::copy(data, data + Size, target);
-    return target + Size;
-  }
-  static uint8_t *SavePacked(const uint8_t *data, uint8_t *target,
-                             std::size_t size) {
-    std::copy(data, data + (Size * size), target);
-    return target + (Size * size);
-  }
-  static const uint8_t *Load(uint8_t *data, const uint8_t *target) {
-    std::copy(target, target + Size, data);
-    return target + Size;
-  }
-  static const uint8_t *LoadPacked(uint8_t *data, const uint8_t *target,
-                                   std::size_t size) {
-    std::copy(target, target + (Size * size), data);
-    return target + (Size * size);
-  }
-};
-// if the target platform is big endian, we should convert the byte order first
-template <std::size_t Size> struct EndianHelper<Size, false> {
-  static uint8_t *Save(uint8_t *data, uint8_t *target) {
-    ReverseEndian<Size>(data, target);
-    return target + Size;
-  }
-  static uint8_t *SavePacked(uint8_t *data, uint8_t *target, std::size_t size) {
-    for (std::size_t i = 0; i < size; i++) {
-      ReverseEndian<Size>(data, target);
-      target += Size;
-    }
-    return target + (Size * size);
-  }
-  static void Load(uint8_t *data, const uint8_t *target) {
-    ReverseEndian<Size>(target, data);
-  }
-};
 // helper to avoid static_assert trigger directly
 template <typename> struct DeferredFalse : std::false_type {};
 template <typename T, typename Enable = void> struct Coder {
-  static uint8_t *Write(const T value, uint8_t *ptr) {
+  static uint8_t *Write(const T &value, uint8_t *ptr) {
     static_assert(DeferredFalse<T>::value,
                   "fall through default coder, unsupported type.");
     return nullptr;
@@ -72,7 +25,7 @@ template <typename T, typename Enable = void> struct Coder {
                   "fall through default coder, unsupported type.");
     return nullptr;
   }
-  static std::size_t Size(const T value) {
+  static std::size_t Size(const T &value) {
     static_assert(DeferredFalse<T>::value,
                   "fall through default coder, unsupported type.");
     return 0;
@@ -80,29 +33,46 @@ template <typename T, typename Enable = void> struct Coder {
 };
 
 struct CoderWrapper {
-  static std::unordered_map<std::size_t, std::unique_ptr<CoderWrapper>>
-      IdToCoderMap;
+  static std::unordered_map<std::size_t, CoderWrapper *> IdToCoderMap;
   static std::unordered_map<std::type_index, std::size_t> CppIdToIdMap;
-  virtual uint8_t *Write(const void *value, uint8_t *ptr) = 0;
   virtual const uint8_t *Read(void *out, const uint8_t *ptr) = 0;
-  virtual std::size_t Size(const void *value) = 0;
+  virtual std::size_t TypeSize() = 0;
 };
 
 template <typename T> struct CoderWrapperImpl : public CoderWrapper {
-  uint8_t *Write(const void *value, uint8_t *ptr) override {
-    return Coder<T>::Write(*reinterpret_cast<T *>(value), ptr);
-  }
   const uint8_t *Read(void *out, const uint8_t *ptr) override {
-    return Coder<T>::Read(*reinterpret_cast<T *>(value), ptr);
+    return Coder<T>::Read(*reinterpret_cast<T *>(out), ptr);
   }
-  size_t Size(const void *value) override {
-    return Coder<T>::Size(*reinterpret_cast<T *>(value), ptr);
-  }
+  size_t TypeSize() override { return sizeof(T); }
 };
+
+template <typename T>
+inline static uint8_t *WriteRaw(const T &value, uint8_t *ptr) {
+  return Coder<T>::Write(value, ptr);
+}
+template <typename T>
+inline static const uint8_t *ReadRaw(T &out, const uint8_t *ptr) {
+  return Coder<T>::Read(out, ptr);
+}
+template <typename T> inline static std::size_t SizeRaw(const T &value) {
+  return Coder<T>::Size(value);
+}
+template <typename T, std::size_t SIZE>
+inline static uint8_t *WriteRaw(const T (&value)[SIZE], uint8_t *ptr) {
+  return Coder<T[SIZE]>::Write(value, ptr);
+}
+template <typename T, std::size_t SIZE>
+inline static const uint8_t *ReadRaw(T (&out)[SIZE], const uint8_t *ptr) {
+  return Coder<T[SIZE]>::Read(out, ptr);
+}
+template <typename T, std::size_t SIZE>
+inline static constexpr std::size_t SizeRaw(const T (&value)[SIZE]) {
+  return Coder<T[SIZE]>::Size(value);
+}
 
 // pointers are not supported
 template <typename T> struct Coder<T *> {
-  static uint8_t *Write(const T value, uint8_t *ptr) {
+  static uint8_t *Write(const T &value, uint8_t *ptr) {
     static_assert(
         DeferredFalse<T>::value,
         "pointer is not supported, serializable should owns something, not "
@@ -116,7 +86,7 @@ template <typename T> struct Coder<T *> {
         "pointers something, use std::unique ptr instead.");
     return nullptr;
   }
-  static std::size_t Size(const T value) {
+  static std::size_t Size(const T &value) {
     static_assert(
         DeferredFalse<T>::value,
         "pointer is not supported, serializable should owns something, not "
@@ -126,7 +96,7 @@ template <typename T> struct Coder<T *> {
 };
 // shared_ptrs are not supported
 template <typename T> struct Coder<std::shared_ptr<T>> {
-  static uint8_t *Write(const T value, uint8_t *ptr) {
+  static uint8_t *Write(const T &value, uint8_t *ptr) {
     static_assert(
         DeferredFalse<T>::value,
         "shared_ptr is not supported, serializable should owns something, not "
@@ -140,7 +110,7 @@ template <typename T> struct Coder<std::shared_ptr<T>> {
         "shares something.");
     return nullptr;
   }
-  static std::size_t Size(const T value) {
+  static std::size_t Size(const T &value) {
     static_assert(
         DeferredFalse<T>::value,
         "shared_ptr is not supported, serializable should owns something, not "
@@ -198,7 +168,7 @@ struct Coder<T, typename std::enable_if_t<GraininessWrapper<T>::type ==
     out = 0;
     return nullptr;
   }
-  static std::size_t Size(const T value) {
+  static std::size_t Size(const T &value) {
     // same as VarintSizeXX in protobuf
     std::size_t log2value = Log2FloorHelper::Log2Floor(value | 0x1);
     // division to multiplication optimize
@@ -233,7 +203,7 @@ struct Coder<T, typename std::enable_if_t<GraininessWrapper<T>::type ==
     out = static_cast<T>((zig_zag_value >> 1) ^ (~(zig_zag_value & 1) + 1));
     return temp;
   }
-  static std::size_t Size(const T value) {
+  static std::size_t Size(const T &value) {
     // TODO efficiency problem, Size and Write/Read calculate zig zag value
     // twice
     UnsignedT zig_zag_value = ZigZagValue(value);
@@ -260,24 +230,26 @@ template <typename T>
 };
 // unique_ptr Type
 template <typename T, typename... Ts> struct Coder<std::unique_ptr<T, Ts...>> {
-  static uint8_t *Write(const std::unique_ptr<T, Ts...> unique_ptr,
+  static uint8_t *Write(const std::unique_ptr<T, Ts...> &unique_ptr,
                         uint8_t *ptr) {
     // TODO do I need to check the existence?
-    ptr = WriteRaw(CoderWrapper::CppIdToIdMap[typeid(T)]);
-    ptr = WriteRaw(*unique_ptr);
+    ptr = WriteRaw(CoderWrapper::CppIdToIdMap[typeid(T)], ptr);
+    ptr = WriteRaw(*unique_ptr, ptr);
     return ptr;
   }
   static const uint8_t *Read(std::unique_ptr<T, Ts...> &unique_ptr,
                              const uint8_t *ptr) {
     std::size_t id;
     ptr = ReadRaw(id, ptr);
-    void *out;
+    std::size_t type_size = CoderWrapper::IdToCoderMap[id]->TypeSize();
+    void *out = new uint8_t[type_size];
     ptr = CoderWrapper::IdToCoderMap[id]->Read(out, ptr);
-    unique_ptr.reset(reinterpret_cast<T>(out));
+    unique_ptr.reset(reinterpret_cast<T *>(out));
     return ptr;
   }
-  static std::size_t Size(const std::unique_ptr<T, Ts...> unique_ptr) {
-    return 0;
+  static std::size_t Size(const std::unique_ptr<T, Ts...> &unique_ptr) {
+    std::size_t id = CoderWrapper::CppIdToIdMap[typeid(id)];
+    return SizeRaw(id) + SizeRaw(*unique_ptr);
   }
 };
 // encoder for arrays which element is varint
@@ -403,28 +375,6 @@ template <> struct Coder<std::string> {
     return Coder<decltype(string_size)>::Size(string_size) + s.size();
   }
 };
-template <typename T> static uint8_t *WriteRaw(const T value, uint8_t *ptr) {
-  return Coder<T>::Write(value, ptr);
-}
-template <typename T>
-static const uint8_t *ReadRaw(T &out, const uint8_t *ptr) {
-  return Coder<T>::Read(out, ptr);
-}
-template <typename T> static std::size_t SizeRaw(const T value) {
-  return Coder<T>::Size(value);
-}
-template <typename T, std::size_t SIZE>
-static uint8_t *WriteRaw(const T (&value)[SIZE], uint8_t *ptr) {
-  return Coder<T[SIZE]>::Write(value, ptr);
-}
-template <typename T, std::size_t SIZE>
-static const uint8_t *ReadRaw(T (&out)[SIZE], const uint8_t *ptr) {
-  return Coder<T[SIZE]>::Read(out, ptr);
-}
-template <typename T, std::size_t SIZE>
-static constexpr std::size_t SizeRaw(const T (&value)[SIZE]) {
-  return Coder<T[SIZE]>::Size(value);
-}
 
 } // namespace serialization
 } // namespace me
