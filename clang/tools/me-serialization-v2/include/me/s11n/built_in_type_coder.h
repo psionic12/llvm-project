@@ -35,15 +35,22 @@ template <typename T, typename Enable = void> struct Coder {
 struct CoderWrapper {
   static std::unordered_map<std::size_t, CoderWrapper *> IdToCoderMap;
   static std::unordered_map<std::type_index, std::size_t> CppIdToIdMap;
+  virtual uint8_t *Write(const void *value, uint8_t *ptr) = 0;
   virtual const uint8_t *Read(void *out, const uint8_t *ptr) = 0;
-  virtual std::size_t TypeSize() = 0;
+  virtual void *New() = 0;
 };
 
 template <typename T> struct CoderWrapperImpl : public CoderWrapper {
+  uint8_t *Write(const void *value, uint8_t *ptr) override {
+    return Coder<T>::Write(*reinterpret_cast<const T *>(value), ptr);
+  }
   const uint8_t *Read(void *out, const uint8_t *ptr) override {
     return Coder<T>::Read(*reinterpret_cast<T *>(out), ptr);
   }
-  size_t TypeSize() override { return sizeof(T); }
+  void *New() override {
+    // this means a serializable must has a default constructor
+    return new T();
+  }
 };
 
 template <typename T>
@@ -233,16 +240,16 @@ template <typename T, typename... Ts> struct Coder<std::unique_ptr<T, Ts...>> {
   static uint8_t *Write(const std::unique_ptr<T, Ts...> &unique_ptr,
                         uint8_t *ptr) {
     // TODO do I need to check the existence?
-    ptr = WriteRaw(CoderWrapper::CppIdToIdMap[typeid(T)], ptr);
-    ptr = WriteRaw(*unique_ptr, ptr);
+    auto id = CoderWrapper::CppIdToIdMap[typeid(*unique_ptr)];
+    ptr = WriteRaw(id, ptr);
+    ptr = CoderWrapper::IdToCoderMap[id]->Write(unique_ptr.get(), ptr);
     return ptr;
   }
   static const uint8_t *Read(std::unique_ptr<T, Ts...> &unique_ptr,
                              const uint8_t *ptr) {
     std::size_t id;
     ptr = ReadRaw(id, ptr);
-    std::size_t type_size = CoderWrapper::IdToCoderMap[id]->TypeSize();
-    void *out = new uint8_t[type_size];
+    void *out = CoderWrapper::IdToCoderMap[id]->New();
     ptr = CoderWrapper::IdToCoderMap[id]->Read(out, ptr);
     unique_ptr.reset(reinterpret_cast<T *>(out));
     return ptr;

@@ -3,17 +3,17 @@
 #include <string>
 class Base {
 public:
-  std::string msg = "base";
+  std::string msg = "Base";
   virtual std::string Test() { return msg; }
 };
-class DerivedOne : Base {
+class DerivedOne : public Base {
 public:
   std::string msg = "DerivedOne";
   std::string Test() override { return msg; }
 };
-class DerivedTwo : Base {
+class DerivedTwo : public Base {
 public:
-  std::string msg = "DerivedOne";
+  std::string msg = "DerivedTwo";
   std::string Test() override { return msg; }
 };
 #endif // LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_TEST_BASE_DERIVE_H_
