@@ -4,7 +4,7 @@
 #include "me/s11n/field_coder.h"
 #include <cstdint>
 namespace me {
-namespace serialization {
+namespace s11n {
 
 template <> struct Coder<Foo> {
   static uint8_t *Write(const Foo& value, uint8_t *ptr) {

@@ -3,7 +3,7 @@
 #include "base_derive.h"
 #include "me/s11n/field_coder.h"
 namespace me {
-namespace serialization {
+namespace s11n {
 
 template <> struct Coder<Base> {
   static uint8_t *Write(const Base& value, uint8_t *ptr) {

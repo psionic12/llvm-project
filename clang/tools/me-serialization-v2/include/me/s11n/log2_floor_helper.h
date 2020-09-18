@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <type_traits>
 namespace me {
-namespace serialization {
+namespace s11n {
 struct Log2FloorHelper {
   template <typename U, std::size_t SIZE> struct Bits {
     constexpr static std::size_t value = SIZE;

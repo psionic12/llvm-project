@@ -6787,41 +6787,6 @@ static void handleMESerializedAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
                                               Categories.size()));
 }
 
-static void handleMEAliasAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
-  if (!checkAttributeNumArgs(S, AL, 1))
-    return;
-
-  StringRef Type;
-  if (const auto *SE = dyn_cast_or_null<StringLiteral>(AL.getArgAsExpr(0)))
-    Type = SE->getString();
-
-  D->addAttr(::new (S.Context) MEAliasAttr(S.Context, AL, Type));
-}
-
-static void handleMEListAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
-  assert(checkAttributeAtLeastNumArgs(S, AL, 1) &&
-         "Invalid number of arguments in an list attribute");
-
-  StringRef ElementType;
-  S.checkStringLiteralArgumentAttr(AL, 0, ElementType);
-
-  StringRef AliasType;
-  if (AL.getNumArgs() > 1)
-    S.checkStringLiteralArgumentAttr(AL, 1, AliasType);
-
-  StringRef Iterator;
-  if (AL.getNumArgs() > 2)
-    S.checkStringLiteralArgumentAttr(AL, 2, Iterator);
-
-  StringRef Emplacer;
-  if (AL.getNumArgs() > 3)
-    S.checkStringLiteralArgumentAttr(AL, 3, Emplacer);
-
-  D->addAttr(::new (S.Context)
-                 MEListAttr(S.Context, AL, ElementType, AliasType,
-                            Iterator, Emplacer));
-}
-
 //===----------------------------------------------------------------------===//
 // Top Level Sema Entry Points
 //===----------------------------------------------------------------------===//
@@ -7485,14 +7450,6 @@ static void ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D,
 
   case ParsedAttr::AT_MESerialized:
     handleMESerializedAttr(S, D, AL);
-    break;
-
-  case ParsedAttr::AT_MEAlias:
-    handleMEAliasAttr(S, D, AL);
-    break;
-
-  case ParsedAttr::AT_MEList:
-    handleMEListAttr(S, D, AL);
     break;
   }
 }

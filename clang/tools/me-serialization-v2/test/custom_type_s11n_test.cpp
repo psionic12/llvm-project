@@ -4,11 +4,11 @@ class CustomTypeS11nTest : public testing::Test {};
 static uint8_t buffer[256];
 TEST_F(CustomTypeS11nTest, class_simulation) {
   Foo foo;
-  auto *ptr = me::serialization::WriteRaw(foo, buffer);
-  ASSERT_EQ(ptr - buffer, me::serialization::SizeRaw(foo));
+  auto *ptr = me::s11n::WriteRaw(foo, buffer);
+  ASSERT_EQ(ptr - buffer, me::s11n::SizeRaw(foo));
   Foo foo2;
   memset(&foo2, 0, sizeof(foo2));
-  me::serialization::ReadRaw(foo2, buffer);
+  me::s11n::ReadRaw(foo2, buffer);
   ASSERT_EQ(foo.f1, foo2.f1);
   ASSERT_EQ(foo.f2, foo2.f2);
   ASSERT_EQ(foo.f3, foo2.f3);

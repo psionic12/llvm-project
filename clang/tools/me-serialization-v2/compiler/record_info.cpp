@@ -105,20 +105,32 @@ RecordInfo::RecordInfo(SerializableConsumer &Consumer,
                        const clang::CXXRecordDecl *RecordDecl)
     : Consumer(Consumer), RecordDecl(RecordDecl) {
   FullName = RecordDecl->getQualifiedNameAsString();
-  if (RecordDecl == Consumer.serializableDecl()) {
-    Serializable = true;
-  }
 
   // parse all base classes
   for (const auto &CXXBaseSpecifier : RecordDecl->bases()) {
     if (CXXBaseSpecifier.isVirtual()) {
       Consumer.LogWarning(RecordDecl,
                           "Do not support virtual inheritance, ignore");
+      return;
     } else {
       const auto *BaseDecl = RecordDecl->getTypeForDecl()->getAsCXXRecordDecl();
       const RecordInfo &BaseInfo = Consumer.getRecord(BaseDecl);
-      if (BaseInfo.Serializable)
+      if (BaseInfo.Serializable) {
         Serializable = true;
+        return;
+      }
+    }
+  }
+  for (const auto *Method : RecordDecl->methods()) {
+    if (Method->getAttr<clang::MESerializedAttr>()) {
+      Serializable = true;
+      return;
+    }
+  }
+  for (auto *Field : RecordDecl->fields()) {
+    if (Field->getAttr<clang::MESerializedAttr>()) {
+      Serializable = true;
+      return;
     }
   }
 }
@@ -204,7 +216,6 @@ void EntryInfo::ToCpp(std::fstream &Out, EntryIndexer::EntryMap &EntryMap) {
   } else {
     Out << "if (" << EntryName.str() << ".size() > 0) {\n";
   }
-
 
   Out << "}\n";
 }

@@ -3,25 +3,43 @@
 #include <iostream>
 #include <regex>
 
-void EntryIndexer::parse(std::fstream &In) {
+bool EntryIndexer::parse(std::fstream &In) {
   std::string S;
-  std::regex Regex(
-      "([0-9a-zA-Z_](::[0-9a-zA-Z_])*)(::[0-9a-zA-Z_])=([1-9][0-9]*)");
-  std::smatch Matches;
-  while (std::getline(In, S)) {
-    if (std::regex_search(S, Matches, Regex)) {
-      const std::string &ClassName = Matches[1];
-      const std::string &FieldName = Matches[3];
-      const unsigned int Index = std::stoi(Matches[4]);
-      RecordMap[ClassName][FieldName] = Index;
-    }
+  while (In) {
+    if (!parseClass(In))
+      return false;
   }
+  return true;
 }
 void EntryIndexer::refresh(std::fstream &Out) {
-  for (const auto &Pair : RecordMap) {
+  for (const auto &Pair : ClassId) {
     const auto &ClassName = Pair.first;
     for (const auto &Entry : Pair.second) {
       Out << ClassName << "::" << Entry.first << "=" << Entry.second << "\n";
     }
   }
+}
+bool EntryIndexer::parseClass(std::fstream &In) {
+  if (In.peek() == '+') {
+    int i = 0;
+
+  } else {
+    return false;
+  }
+}
+bool EntryIndexer::parseField(std::fstream &In) {}
+bool EntryIndexer::parseIdentifier(std::fstream &In) {
+  std::stringstream ss;
+  char c = In.peek();
+  if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_') {
+    ss << In.get();
+    c = In.peek();
+    while ((c >= 0 && c <= 9) || (c >= 'a' && c <= 'z') ||
+           (c >= 'A' && c <= 'Z') || c == '_') {
+      ss << In.get();
+      c = In.peek();
+    }
+    return true;
+  }
+  return false;
 }

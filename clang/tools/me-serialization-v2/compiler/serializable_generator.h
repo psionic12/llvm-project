@@ -1,7 +1,8 @@
 #ifndef LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_SERIALIZABLE_GENERATOR_H_
 #define LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_SERIALIZABLE_GENERATOR_H_
-#include "record_info.h"
 #include "indexer.h"
+#include "record_database.h"
+#include "record_info.h"
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Frontend/CompilerInstance.h"
@@ -16,27 +17,10 @@ private:
   SerializableConsumer &Consumer;
 };
 
-class SerializableClassFinder
-    : public clang::RecursiveASTVisitor<SerializableVisitor> {
-public:
-  bool VisitCXXRecordDecl(clang::CXXRecordDecl *Declaration) {
-    if (Declaration->getQualifiedNameAsString() ==
-        "me::serialization::Serializable") {
-      SerializableDecl = Declaration;
-      // class found, do not continue
-      return false;
-    }
-    return true;
-  }
-  const clang::CXXRecordDecl *getDecl() { return SerializableDecl; }
-
-private:
-  const clang::CXXRecordDecl *SerializableDecl = nullptr;
-};
-
 class SerializableConsumer : public clang::ASTConsumer {
 public:
-  SerializableConsumer(clang::ASTContext *Context, llvm::StringRef InFile);
+  SerializableConsumer(clang::CompilerInstance &Compiler,
+                       llvm::StringRef InFile);
   void LogWarning(const clang::Decl *Decl, const char *Format, ...);
 
   void LogError(const clang::Decl *Decl, const char *format, ...);
@@ -54,18 +38,16 @@ public:
       return Result->second;
     }
   }
-  const clang::CXXRecordDecl *serializableDecl() { return SerializableDecl; }
   bool HasError() { return HasErrors; }
 
 private:
   std::unordered_map<const clang::CXXRecordDecl *, RecordInfo> Cache;
   SerializableVisitor Visitor;
-  SerializableClassFinder Finder;
   clang::ASTContext *Context;
   llvm::StringRef InFile;
-  const clang::CXXRecordDecl *SerializableDecl = nullptr;
   bool HasErrors = false;
   EntryIndexer Indexer;
+  RecordDatabase Database;
 };
 
 class SerializableGenerationAction : public clang::ASTFrontendAction {
@@ -73,7 +55,7 @@ public:
   virtual std::unique_ptr<clang::ASTConsumer>
   CreateASTConsumer(clang::CompilerInstance &Compiler, llvm::StringRef InFile) {
     return std::unique_ptr<clang::ASTConsumer>(
-        new SerializableConsumer(&Compiler.getASTContext(), InFile));
+        new SerializableConsumer(Compiler, InFile));
   }
 };
 #endif // LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_SERIALIZABLE_GENERATOR_H_

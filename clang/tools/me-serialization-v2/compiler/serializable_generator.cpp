@@ -1,9 +1,9 @@
 #include "serializable_generator.h"
-
-#include "llvm/Support/FileSystem.h"
-#include "llvm/Support/Path.h"
+#include <clang/Basic/FileManager.h>
 #include <cstdarg>
 #include <fstream>
+#include <llvm/Support/FileSystem.h>
+#include <llvm/Support/Path.h>
 bool SerializableVisitor::VisitCXXRecordDecl(
     clang::CXXRecordDecl *Declaration) {
   Consumer.getRecord(Declaration);
@@ -27,10 +27,6 @@ void SerializableConsumer::LogError(const clang::Decl *Decl, const char *format,
   HasErrors = true;
 }
 void SerializableConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
-  // first find the Serializable class
-  Finder.TraverseDecl(Context.getTranslationUnitDecl());
-  SerializableDecl = Finder.getDecl();
-  // Decide each record is an Serializable or not
   Visitor.TraverseDecl(Context.getTranslationUnitDecl());
   // now parse the fields of each record
   for (auto &Record : Cache) {
@@ -52,10 +48,22 @@ void SerializableConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   Indexer.refresh(IndexFile);
   IndexFile.close();
 }
-SerializableConsumer::SerializableConsumer(clang::ASTContext *Context,
+SerializableConsumer::SerializableConsumer(clang::CompilerInstance &Compiler,
                                            llvm::StringRef InFile)
-    : Visitor(*this), Context(Context), InFile(InFile) {
-  std::fstream IndexFile((InFile + ".index").str());
+    : Visitor(*this), Context(&Compiler.getASTContext()), InFile(InFile) {
+  auto& VFS = Compiler.getVirtualFileSystem();
+  llvm::SmallString<128> Path(InFile);
+  llvm::sys::path::replace_extension(Path, ".db");
+  if (!VFS.exists(Path)) {
+    Compiler.getFileManager().
+  }
+  clang::SourceManager &SM = Compiler.getSourceManager();
+
+  auto FileEntry = Compiler.getFileManager().getFile(Path);
+  clang::FileID FileId = SM.createFileID(
+      FileEntry ? *FileEntry : nullptr, clang::SourceLocation(), clang::SrcMgr::C_User);
+
+                             std::fstream IndexFile((InFile + ".index").str());
   Indexer.parse(IndexFile);
   IndexFile.close();
 }

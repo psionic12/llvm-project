@@ -4,7 +4,7 @@
 #include "built_in_types_helper.h"
 #include <cstdint>
 namespace me {
-namespace serialization {
+namespace s11n {
 inline constexpr uint8_t MakeTag(bool rtti, Graininess type) {
   uint8_t tag = static_cast<uint8_t>(type);
   tag |= static_cast<uint8_t>(rtti) << 7;

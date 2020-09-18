@@ -11,7 +11,7 @@ struct is_specialization : std::false_type {};
 
 template <template <typename...> class Ref, typename... Args>
 struct is_specialization<Ref<Args...>, Ref> : std::true_type {};
-namespace serialization {
+namespace s11n {
 #define STRONG_TYPEDEF(_base, _type)                                           \
   class _type {                                                                \
   public:                                                                      \

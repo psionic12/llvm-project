@@ -1,7 +1,7 @@
 #include "base_derive.s11n.h"
 #include "foo.s11n.h"
 namespace me {
-namespace serialization {
+namespace s11n {
 
 CoderWrapperImpl<bool> _coder_wrapper_bool;
 CoderWrapperImpl<char> _coder_wrapper_char;

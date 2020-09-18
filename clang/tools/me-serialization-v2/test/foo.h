@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 struct Foo {
-  template <typename T, typename Enable> friend struct me::serialization::Coder;
+  template <typename T, typename Enable> friend struct me::s11n::Coder;
 
 public:
   int f1 = -1;

@@ -1,7 +1,7 @@
 #ifndef LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_INCLUDE_ME_S11N_ENDIANNESS_HELPER_H_
 #define LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_INCLUDE_ME_S11N_ENDIANNESS_HELPER_H_
 namespace me {
-namespace serialization {
+namespace s11n {
 template <std::size_t Size, std::size_t Index = 0>
 std::enable_if_t<(Size <= 1) || (Index >= Size), void>
 ReverseEndian(const uint8_t *s, uint8_t *t) {}

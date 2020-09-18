@@ -11,7 +11,7 @@
 #include <unordered_map>
 #include <vector>
 namespace me {
-namespace serialization {
+namespace s11n {
 // helper to avoid static_assert trigger directly
 template <typename> struct DeferredFalse : std::false_type {};
 template <typename T, typename Enable = void> struct Coder {
