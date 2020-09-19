@@ -6,15 +6,6 @@
 #include <clang/Lex/Lexer.h>
 #include <llvm/Support/VirtualFileSystem.h>
 #include <unordered_map>
-enum {
-#define DIAG(ENUM, FLAGS, DEFAULT_MAPPING, DESC, GROUP, SFINAE, NOWERROR,      \
-             SHOWINSYSHEADER, CATEGORY)                                        \
-  ENUM,
-#define PARSESTART
-#include "DiagnosticS11nKinds.inc"
-#undef DIAG
-  NUM_BUILTIN_PARSE_DIAGNOSTICS
-};
 class RecordDatabase {
 public:
   bool parse(llvm::StringRef InFile);
@@ -39,16 +30,19 @@ private:
     std::unordered_map<std::string, unsigned int> StrToIndex;
     unsigned int Max = 0;
   };
-  static clang::IntrusiveRefCntPtr<llvm::vfs::InMemoryFileSystem> getFS();
+  static clang::IntrusiveRefCntPtr<llvm::vfs::InMemoryFileSystem> fs();
   static clang::FileManager &getFileManager();
   static clang::DiagnosticsEngine &diag();
   static clang::SourceManager &getSourceManager();
-  bool parseClass(size_t& Cursor);
+  static clang::IntrusiveRefCntPtr<clang::DiagnosticOptions> diagOpts();
+  static clang::LangOptions &langopts();
+  bool parseClass(size_t &Cursor);
   bool parseFullName(size_t &Cursor, std::string &Name);
-  bool expectedToken(size_t &Cursor, clang::tok::TokenKind Kind);
+  bool expectedToken(size_t &Cursor, clang::tok::TokenKind Kind,
+                     bool CanFail = false);
   bool parseIndex(size_t &Cursor, uint32_t &Index);
   bool parseIdentifier(size_t &Cursor, std::string &Name, bool Append);
-  bool parseField(size_t &Cursor, FullNameMap& Class);
+  bool parseField(size_t &Cursor, FullNameMap &Class);
   std::vector<clang::Token> Tokens;
   FullNameMap Classes;
   std::unordered_map<unsigned int, FullNameMap> ClassesToFields;

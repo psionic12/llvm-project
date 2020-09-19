@@ -1,21 +1,33 @@
 #include "record_database.h"
+#include <clang/Parse/ParseDiagnostic.h>
 #include <clang/Basic/FileManager.h>
 #include <clang/Basic/FileSystemOptions.h>
 #include <clang/Basic/SourceManager.h>
+#include <clang/Frontend/TextDiagnosticPrinter.h>
 #include <llvm/Support/VirtualFileSystem.h>
+clang::LangOptions &RecordDatabase::langopts() {
+  static clang::LangOptions LangOpts;
+  LangOpts.CPlusPlus=true;
+  return LangOpts; }
+clang::IntrusiveRefCntPtr<clang::DiagnosticOptions> RecordDatabase::diagOpts() {
+  static clang::IntrusiveRefCntPtr<clang::DiagnosticOptions> DiagOpts;
+  return DiagOpts;
+}
 clang::IntrusiveRefCntPtr<llvm::vfs::InMemoryFileSystem>
-RecordDatabase::getFS() {
+RecordDatabase::fs() {
   static clang::IntrusiveRefCntPtr<llvm::vfs::InMemoryFileSystem> FS(
       new llvm::vfs::InMemoryFileSystem);
   return FS;
 }
 clang::FileManager &RecordDatabase::getFileManager() {
-  static clang::FileManager Files(clang::FileSystemOptions(), getFS());
+  static clang::FileManager Files(clang::FileSystemOptions(), fs());
   return Files;
 }
 clang::DiagnosticsEngine &RecordDatabase::diag() {
-  static clang::DiagnosticsEngine Diagnostics(new clang::DiagnosticIDs,
-                                              new clang::DiagnosticOptions);
+
+  static clang::DiagnosticsEngine Diagnostics(
+      new clang::DiagnosticIDs, diagOpts(),
+      new clang::TextDiagnosticPrinter(llvm::errs(), diagOpts().get()));
   return Diagnostics;
 }
 clang::SourceManager &RecordDatabase::getSourceManager() {
@@ -33,12 +45,14 @@ bool RecordDatabase::parse(llvm::StringRef InFile) {
   std::unique_ptr<llvm::MemoryBuffer> Code = std::move(DataOrError.get());
   if (Code->getBufferSize() == 0)
     return false;
-  getFS()->addFileNoOwn(Path, 0, Code.get());
+  fs()->addFileNoOwn(Path, 0, Code.get());
   auto File = getFileManager().getFile(Path);
   auto FileID = getSourceManager().createFileID(
       File ? *File : nullptr, clang::SourceLocation(), clang::SrcMgr::C_User);
+
+  diag().getClient()->BeginSourceFile(langopts());
   clang::Lexer Lexer(FileID, Code.get(), getSourceManager(),
-                     clang::LangOptions());
+                     langopts());
 
   Tokens.clear();
   while (true) {
@@ -49,12 +63,15 @@ bool RecordDatabase::parse(llvm::StringRef InFile) {
   }
 
   std::size_t i = 0;
+  bool success = true;
   while (i < Tokens.size()) {
     if (!parseClass(i)) {
-      return false;
+      success = false;
+      break;
     }
   }
-  return true;
+  diag().getClient()->EndSourceFile();
+  return success;
 }
 bool RecordDatabase::parseClass(size_t &Cursor) {
   uint32_t Index;
@@ -71,9 +88,7 @@ bool RecordDatabase::parseClass(size_t &Cursor) {
   Classes.emplace(Name, Index);
   auto Class = ClassesToFields[Index];
 
-  while (parseField(Cursor, Class)) {
-  }
-  Cursor--;
+  while (parseField(Cursor, Class));
 
   if (!expectedToken(Cursor, clang::tok::r_brace)) {
     return false;
@@ -83,21 +98,25 @@ bool RecordDatabase::parseClass(size_t &Cursor) {
 bool RecordDatabase::parseFullName(size_t &Cursor, std::string &Name) {
   if (!parseIdentifier(Cursor, Name, true))
     return false;
-  while (expectedToken(Cursor, clang::tok::coloncolon)) {
+  while (expectedToken(Cursor, clang::tok::coloncolon, true)) {
     if (!parseIdentifier(Cursor, Name, true)) {
       return false;
     }
   }
-  Cursor--;
   return true;
 }
-bool RecordDatabase::expectedToken(size_t &Cursor, clang::tok::TokenKind Kind) {
-  clang::Token Token = Tokens[Cursor++];
-  if (!Token.is(Kind)) {
-    diag().Report(Token.getLocation(), mes11n_err_expected_token) << Kind;
+bool RecordDatabase::expectedToken(size_t &Cursor, clang::tok::TokenKind Kind,
+                                   bool CanFail) {
+  clang::Token Token = Tokens[Cursor];
+  if (Token.is(Kind)) {
+    Cursor++;
+    return true;
+  } else {
+    if(!CanFail) {
+      diag().Report(Token.getLocation(), clang::diag::mes11n_err_expected_token) << Kind;
+    }
     return false;
   }
-  return true;
 }
 bool RecordDatabase::parseIndex(size_t &Cursor, uint32_t &Index) {
   long l = 0;
@@ -107,22 +126,22 @@ bool RecordDatabase::parseIndex(size_t &Cursor, uint32_t &Index) {
   clang::Token Token = Tokens[Cursor++];
   if (Token.is(clang::tok::numeric_constant)) {
     auto str = clang::Lexer::getSpelling(Token, getSourceManager(),
-                                         clang::LangOptions());
+                                         langopts());
     for (char c : str) {
-      if (c < 0 || c > 9) {
+      if (c < '0' || c > '9') {
         // not a integer
-        diag().Report(Token.getLocation(), mes11n_err_invalid_index) << str;
+        diag().Report(Token.getLocation(), clang::diag::mes11n_err_invalid_index) << str;
         return -1;
       }
     }
     l = std::stol(str);
     if (l <= 0) {
-      diag().Report(Token.getLocation(), mes11n_err_invalid_index)
+      diag().Report(Token.getLocation(), clang::diag::mes11n_err_invalid_index)
           << std::to_string(l);
       return false;
     }
     if (l > 0xFFFFFFFF) {
-      diag().Report(Token.getLocation(), mes11n_err_index_max)
+      diag().Report(Token.getLocation(), clang::diag::mes11n_err_index_max)
           << std::to_string(l);
       return false;
     }
@@ -137,12 +156,12 @@ bool RecordDatabase::parseIdentifier(size_t &Cursor, std::string &Name,
                                      bool Append) {
   clang::Token Token = Tokens[Cursor++];
   if (!Token.isAnyIdentifier()) {
-    diag().Report(Token.getLocation(), mes11n_err_expected_token)
+    diag().Report(Token.getLocation(), clang::diag::mes11n_err_expected_token)
         << "identifier";
     return false;
   }
   std::string Str = clang::Lexer::getSpelling(Token, getSourceManager(),
-                                              clang::LangOptions());
+                                              langopts());
   if (Append) {
     Name.append(Str);
   } else {
