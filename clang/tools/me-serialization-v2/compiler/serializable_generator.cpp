@@ -45,25 +45,9 @@ void SerializableConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   // update index file
   std::fstream IndexFile((InFile + ".index").str(),
                          std::ios::out | std::ios::trunc);
-  Indexer.refresh(IndexFile);
-  IndexFile.close();
+  Database.save();
 }
 SerializableConsumer::SerializableConsumer(clang::CompilerInstance &Compiler,
                                            llvm::StringRef InFile)
-    : Visitor(*this), Context(&Compiler.getASTContext()), InFile(InFile) {
-  auto& VFS = Compiler.getVirtualFileSystem();
-  llvm::SmallString<128> Path(InFile);
-  llvm::sys::path::replace_extension(Path, ".db");
-  if (!VFS.exists(Path)) {
-    Compiler.getFileManager().
-  }
-  clang::SourceManager &SM = Compiler.getSourceManager();
-
-  auto FileEntry = Compiler.getFileManager().getFile(Path);
-  clang::FileID FileId = SM.createFileID(
-      FileEntry ? *FileEntry : nullptr, clang::SourceLocation(), clang::SrcMgr::C_User);
-
-                             std::fstream IndexFile((InFile + ".index").str());
-  Indexer.parse(IndexFile);
-  IndexFile.close();
-}
+    : Visitor(*this), Context(&Compiler.getASTContext()),
+      Database(Compiler.getDiagnostics()) {}

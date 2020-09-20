@@ -1,0 +1,9 @@
+#include <../database/record_database.h>
+#include <clang/Frontend/TextDiagnosticPrinter.h>
+int main() {
+  clang::IntrusiveRefCntPtr<clang::DiagnosticOptions> DiagOpts(new clang::DiagnosticOptions);
+  clang::TextDiagnosticPrinter Client(llvm::errs(), DiagOpts.get());
+  clang::DiagnosticsEngine Diags(new clang::DiagnosticIDs, DiagOpts, &Client, false);
+  RecordDatabase database(Diags);
+  database.parse("example_record_database.txt");
+}

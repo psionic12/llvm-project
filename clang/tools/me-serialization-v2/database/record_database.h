@@ -8,7 +8,9 @@
 #include <unordered_map>
 class RecordDatabase {
 public:
+  RecordDatabase(clang::DiagnosticsEngine& Diags);
   bool parse(llvm::StringRef InFile);
+  void save();
 
 private:
   class FullNameMap {
@@ -25,17 +27,15 @@ private:
       }
       return pair.first->second;
     }
+    void clear() {
+      StrToIndex.clear();
+      Max = 0;
+    }
 
   private:
     std::unordered_map<std::string, unsigned int> StrToIndex;
     unsigned int Max = 0;
   };
-  static clang::IntrusiveRefCntPtr<llvm::vfs::InMemoryFileSystem> fs();
-  static clang::FileManager &getFileManager();
-  static clang::DiagnosticsEngine &diag();
-  static clang::SourceManager &getSourceManager();
-  static clang::IntrusiveRefCntPtr<clang::DiagnosticOptions> diagOpts();
-  static clang::LangOptions &langopts();
   bool parseClass(size_t &Cursor);
   bool parseFullName(size_t &Cursor, std::string &Name);
   bool expectedToken(size_t &Cursor, clang::tok::TokenKind Kind,
@@ -43,6 +43,13 @@ private:
   bool parseIndex(size_t &Cursor, uint32_t &Index);
   bool parseIdentifier(size_t &Cursor, std::string &Name, bool Append);
   bool parseField(size_t &Cursor, FullNameMap &Class);
+  std::unique_ptr<clang::Lexer> loadData(clang::StringRef InFile);
+  clang::LangOptions LangOpts;
+  clang::IntrusiveRefCntPtr<llvm::vfs::InMemoryFileSystem> InMemFS;
+  clang::DiagnosticsEngine& Diags;
+  clang::FileManager FileMgr;
+  clang::SourceManager SM;
+
   std::vector<clang::Token> Tokens;
   FullNameMap Classes;
   std::unordered_map<unsigned int, FullNameMap> ClassesToFields;

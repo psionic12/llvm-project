@@ -1,5 +1,6 @@
 #ifndef LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_SERIALIZABLE_GENERATOR_H_
 #define LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_SERIALIZABLE_GENERATOR_H_
+#include "../database/record_database.h"
 #include "indexer.h"
 #include "record_database.h"
 #include "record_info.h"
@@ -46,7 +47,6 @@ private:
   clang::ASTContext *Context;
   llvm::StringRef InFile;
   bool HasErrors = false;
-  EntryIndexer Indexer;
   RecordDatabase Database;
 };
 

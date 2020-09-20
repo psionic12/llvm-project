@@ -19,3 +19,6 @@ target_include_directories(me_s11n_test PRIVATE ../include)
 configure_file(example_record_database.db ${CMAKE_BINARY_DIR}/example_record_database.db COPYONLY)
 
 add_test(AllTests me_s11n_test)
+
+add_executable(lllll lllll.cpp)
+target_link_libraries(lllll s11n_database)
