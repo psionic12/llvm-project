@@ -7,4 +7,6 @@ clang_target_link_libraries(s11n_database
         clangBasic
         clangLex
         clangFrontend
+        clangToolingCore
+        clangRewrite
         )

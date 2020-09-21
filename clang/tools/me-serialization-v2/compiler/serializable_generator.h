@@ -1,8 +1,6 @@
 #ifndef LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_SERIALIZABLE_GENERATOR_H_
 #define LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_SERIALIZABLE_GENERATOR_H_
 #include "../database/record_database.h"
-#include "indexer.h"
-#include "record_database.h"
 #include "record_info.h"
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/RecursiveASTVisitor.h"
@@ -42,12 +40,14 @@ public:
   bool HasError() { return HasErrors; }
 
 private:
+  static std::set<std::string> HeaderExtensions;
   std::unordered_map<const clang::CXXRecordDecl *, RecordInfo> Cache;
   SerializableVisitor Visitor;
   clang::ASTContext *Context;
   llvm::StringRef InFile;
   bool HasErrors = false;
   RecordDatabase Database;
+  std::string GeneratedFileName;
 };
 
 class SerializableGenerationAction : public clang::ASTFrontendAction {

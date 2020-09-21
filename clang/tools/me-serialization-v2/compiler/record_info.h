@@ -1,7 +1,7 @@
 #ifndef LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_RECORD_INFO_H_
 #define LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_RECORD_INFO_H_
+#include "../database/record_database.h"
 #include "clang/AST/Type.h"
-#include "indexer.h"
 class SerializableConsumer;
 enum EntryKind {
   TypeBool,
@@ -32,7 +32,7 @@ public:
   void AddCategory(clang::StringRef category) {
     Categories.emplace_back(category);
   }
-  void ToCpp(std::fstream& Out, EntryIndexer::EntryMap &EntryMap);
+  void ToCpp(std::fstream& Out, FullNameMap& Class);
 private:
   SerializableConsumer &Consumer;
   clang::StringRef TypeName;
@@ -47,11 +47,12 @@ public:
   RecordInfo(SerializableConsumer &Consumer,
              const clang::CXXRecordDecl *RecordDecl);
   void ParseFields();
-  void ToCpp(std::fstream& Out, EntryIndexer& Indexer);
+  void ToCpp(std::fstream& Out, RecordDatabase& Database, clang::StringRef InFile);
   bool isSerializable() const {
     return Serializable;
   }
 private:
+  friend class RecordCoder;
   SerializableConsumer &Consumer;
   bool Serializable = false;
   bool Pure = false;

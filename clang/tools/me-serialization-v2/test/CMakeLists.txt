@@ -16,7 +16,7 @@ target_link_libraries(me_s11n_test Threads::Threads)
 target_link_libraries(me_s11n_test s11n_database)
 target_include_directories(me_s11n_test PRIVATE ../include)
 
-configure_file(example_record_database.db ${CMAKE_BINARY_DIR}/example_record_database.db COPYONLY)
+configure_file(example_record_database.db ${CMAKE_BINARY_DIR}/bin/example_record_database.db COPYONLY)
 
 add_test(AllTests me_s11n_test)
 

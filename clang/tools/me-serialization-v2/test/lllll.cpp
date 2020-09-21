@@ -5,5 +5,8 @@ int main() {
   clang::TextDiagnosticPrinter Client(llvm::errs(), DiagOpts.get());
   clang::DiagnosticsEngine Diags(new clang::DiagnosticIDs, DiagOpts, &Client, false);
   RecordDatabase database(Diags);
-  database.parse("example_record_database.txt");
+  if(!database.parse("example_record_database.txt")) {
+    return 0;
+  }
+  database.save();
 }

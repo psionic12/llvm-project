@@ -6,6 +6,7 @@ add_clang_tool(serializationc
         compiler.cpp
         record_info.cpp
         serializable_generator.cpp
+        code_guard.cpp
         )
 
 clang_target_link_libraries(serializationc

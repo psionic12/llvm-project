@@ -7,7 +7,7 @@ namespace me {
 namespace s11n {
 
 template <> struct Coder<Foo> {
-  static uint8_t *Write(const Foo& value, uint8_t *ptr) {
+  static uint8_t *Write(const Foo &value, uint8_t *ptr) {
     ptr = WriteRaw(Size(value), ptr);
     ptr = WriteField(1, value.f1, ptr);
     ptr = WriteField(2, value.f2, ptr);
@@ -97,7 +97,7 @@ template <> struct Coder<Foo> {
     }
     return ptr;
   }
-  static std::size_t Size(const Foo& value) {
+  static std::size_t Size(const Foo &value) {
     std::size_t size = 0;
     size += FieldSize<1>(value.f1);
     size += FieldSize<2>(value.f2);
@@ -119,6 +119,6 @@ template <> struct Coder<Foo> {
     return size;
   }
 };
-} // namespace serialization
+} // namespace s11n
 } // namespace me
 #endif // LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_TEST_FOO_S11N_H_

@@ -3,33 +3,55 @@
 #include <clang/Basic/FileSystemOptions.h>
 #include <clang/Basic/SourceManager.h>
 #include <clang/Parse/ParseDiagnostic.h>
+#include <clang/Rewrite/Core/Rewriter.h>
+#include <clang/Tooling/Core/Replacement.h>
 #include <llvm/Support/VirtualFileSystem.h>
+#include <sstream>
 RecordDatabase::RecordDatabase(clang::DiagnosticsEngine &Diags)
     : InMemFS(new llvm::vfs::InMemoryFileSystem), Diags(Diags),
       FileMgr(clang::FileSystemOptions(), InMemFS), SM(Diags, FileMgr) {
   LangOpts.CPlusPlus = true;
 }
-std::unique_ptr<clang::Lexer>
-RecordDatabase::loadData(clang::StringRef InFile) {
+bool RecordDatabase::loadData(clang::StringRef InFile) {
   llvm::SmallString<128> Path(InFile);
   llvm::sys::path::replace_extension(Path, ".db");
-  auto DataOrError = llvm::MemoryBuffer::getFileAsStream(Path);
-  if (std::error_code EC = DataOrError.getError()) {
-    llvm::errs() << EC.message() << "\n";
-    return nullptr;
+
+  auto FDOrErr = llvm::sys::fs::openNativeFileForReadWrite(
+      Path, llvm::sys::fs::CD_OpenAlways, llvm::sys::fs::OF_None);
+  if (!FDOrErr) {
+    llvm::errs() << FDOrErr.takeError() << "\n";
+    return false;
   }
-  std::unique_ptr<llvm::MemoryBuffer> Code = std::move(DataOrError.get());
-  if (Code->getBufferSize() == 0)
-    return nullptr;
+  uint64_t FileSize;
+  if (llvm::sys::fs::file_size(Path, FileSize)) {
+    llvm::errs() << "failed to get file size"
+                 << "\n";
+    return false;
+  }
+  llvm::sys::fs::file_t FD = *FDOrErr;
+  llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> DataOrError =
+      llvm::MemoryBuffer::getOpenFile(FD, Path, FileSize);
+  llvm::sys::fs::closeFile(FD);
+
+  if (std::error_code EC = DataOrError.getError()) {
+
+    llvm::errs() << EC.message() << "\n";
+    LexerPtr = nullptr;
+    return true;
+  }
+  Code = std::move(DataOrError.get());
   InMemFS->addFileNoOwn(Path, 0, Code.get());
   auto File = FileMgr.getFile(Path);
-  auto FileID = SM.createFileID(File ? *File : nullptr, clang::SourceLocation(),
-                                clang::SrcMgr::C_User);
-  return std::make_unique<clang::Lexer>(FileID, Code.get(), SM, LangOpts);
+  FileID = SM.createFileID(File ? *File : nullptr, clang::SourceLocation(),
+                           clang::SrcMgr::C_User);
+  LexerPtr = std::make_unique<clang::Lexer>(FileID, Code.get(), SM, LangOpts);
+  return true;
 }
 bool RecordDatabase::parse(llvm::StringRef InFile) {
 
-  auto LexerPtr = loadData(InFile);
+  if (!loadData(InFile)) {
+    return false;
+  }
   // file does not exist or is empty, just skip parsing
   if (!LexerPtr)
     return true;
@@ -71,7 +93,7 @@ bool RecordDatabase::parseClass(size_t &Cursor) {
     return false;
   }
   Classes.emplace(Name, Index);
-  auto Class = ClassesToFields[Index];
+  auto &Class = ClassesToFields[Index];
 
   while (expectedToken(Cursor, clang::tok::l_paren, true)) {
     Cursor--;
@@ -86,7 +108,7 @@ bool RecordDatabase::parseClass(size_t &Cursor) {
   return true;
 }
 bool RecordDatabase::parseFullName(size_t &Cursor, std::string &Name) {
-  if (!parseIdentifier(Cursor, Name, true))
+  if (!parseIdentifier(Cursor, Name, false))
     return false;
   while (expectedToken(Cursor, clang::tok::coloncolon, true)) {
     if (!parseIdentifier(Cursor, Name, true)) {
@@ -153,6 +175,7 @@ bool RecordDatabase::parseIdentifier(size_t &Cursor, std::string &Name,
   }
   std::string Str = clang::Lexer::getSpelling(Token, SM, LangOpts);
   if (Append) {
+    Name.append("::");
     Name.append(Str);
   } else {
     Name = Str;
@@ -173,5 +196,38 @@ bool RecordDatabase::parseField(size_t &Cursor,
   return true;
 }
 void RecordDatabase::save() {
-
+  // replace the whole file for simplicity.
+  std::string NewCode = CodeGen();
+  clang::StringRef Ref = NewCode;
+  clang::tooling::Replacement Replacement(SM, SM.getLocForStartOfFile(FileID),
+                                          SM.getFileIDSize(FileID), Ref);
+  clang::tooling::Replacements Replaces;
+  if (auto Error = Replaces.add(Replacement)) {
+    llvm::errs() << Error << "\n";
+  }
+  clang::Rewriter Rewrite(SM, LangOpts);
+  clang::tooling::applyAllReplacements(Replaces, Rewrite);
+  Rewrite.overwriteChangedFiles();
+}
+std::string RecordDatabase::CodeGen() {
+  std::stringstream NewCode;
+  for (const auto &pair : Classes.GetOrdered()) {
+    clang::StringRef Name = pair.second;
+    const auto ID = pair.first;
+    NewCode << "(" << ID << ")" << Name.data() << "{\n";
+    auto &Fields = ClassesToFields[ID];
+    for (const auto &pair2 : Fields.GetOrdered()) {
+      clang::StringRef FieldName = pair2.second;
+      const auto FieldID = pair2.first;
+      NewCode << "(" << FieldID << ")" << FieldName.data() << "\n";
+    }
+    NewCode << "}\n";
+  }
+  return NewCode.str();
+}
+std::pair<FullNameMap &, unsigned int>
+RecordDatabase::getClassByName(const std::string &Name) {
+  auto ID = Classes[Name];
+  auto &Class = ClassesToFields[ID];
+  return {Class, ID};
 }

@@ -1,4 +1,5 @@
 #include "serializable_generator.h"
+#include "code_guard.h"
 #include <clang/Basic/FileManager.h>
 #include <cstdarg>
 #include <fstream>
@@ -9,6 +10,8 @@ bool SerializableVisitor::VisitCXXRecordDecl(
   Consumer.getRecord(Declaration);
   return true;
 }
+std::set<std::string> SerializableConsumer::HeaderExtensions{
+    ".h", ".hh", ".hpp", ".hxx", ".inc"};
 void SerializableConsumer::LogWarning(const clang::Decl *Decl,
                                       const char *Format, ...) {
   const auto &source_manager = Decl->getASTContext().getSourceManager();
@@ -37,17 +40,32 @@ void SerializableConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
     return;
 
   // now generator codes for all records
-  std::fstream Cpp((InFile + ".cpp").str(), std::ios::out | std::ios::trunc);
+  std::fstream Generated(GeneratedFileName, std::ios::out | std::ios::trunc);
+  HeaderGuardCoder HeaderGuard(Generated, GeneratedFileName);
+  IncludeCoder IncludeCoder(Generated, InFile);
   for (auto &Record : Cache) {
     Record.second.ToCpp(Cpp, Indexer);
   }
-  Cpp.close();
+  Generated.close();
   // update index file
-  std::fstream IndexFile((InFile + ".index").str(),
-                         std::ios::out | std::ios::trunc);
   Database.save();
 }
 SerializableConsumer::SerializableConsumer(clang::CompilerInstance &Compiler,
                                            llvm::StringRef InFile)
     : Visitor(*this), Context(&Compiler.getASTContext()),
-      Database(Compiler.getDiagnostics()) {}
+      Database(Compiler.getDiagnostics()) {
+
+  llvm::StringRef PathExt = llvm::sys::path::extension(InFile);
+  if (HeaderExtensions.find(PathExt.str()) == HeaderExtensions.end()) {
+    llvm::errs() << "Error: " << InFile << " seems not a header file\n";
+    std::terminate();
+  }
+
+  llvm::SmallString<128> Path(InFile);
+  llvm::sys::path::replace_extension(Path, ".s11n.h");
+  GeneratedFileName = Path.str().str();
+
+  if (!Database.parse(InFile)) {
+    std::terminate();
+  }
+}

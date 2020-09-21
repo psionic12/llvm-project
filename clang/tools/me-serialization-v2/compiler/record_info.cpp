@@ -1,5 +1,5 @@
 #include "record_info.h"
-
+#include "code_guard.h"
 #include "serializable_generator.h"
 #include "clang/AST/Attr.h"
 #include <fstream>
@@ -192,7 +192,7 @@ void RecordInfo::ParseFields() {
     }
   }
 }
-void EntryInfo::ToCpp(std::fstream &Out, EntryIndexer::EntryMap &EntryMap) {
+void EntryInfo::ToCpp(std::fstream &Out, FullNameMap &Class) {
   // get the index number
   auto index = EntryMap[EntryName.str()];
   if (index == 0) {
@@ -219,16 +219,14 @@ void EntryInfo::ToCpp(std::fstream &Out, EntryIndexer::EntryMap &EntryMap) {
 
   Out << "}\n";
 }
-void RecordInfo::ToCpp(std::fstream &Out, EntryIndexer &Indexer) {
+void RecordInfo::ToCpp(std::fstream &Out, RecordDatabase &Database, clang::StringRef InFile) {
   if (!isSerializable())
     return;
   if (Pure)
     return;
 
-  Out << "std::string " << FullName << "::Serialize() {\n";
-  auto &EntryMap = Indexer.getEntryMap(FullName);
-  for (auto &Entry : Entries) {
-    Entry.ToCpp(Out, EntryMap);
-  }
-  Out << "}\n";
+  const auto &Pair = Database.getClassByName(FullName);
+  uint32_t ID = Pair.second;
+  auto &Class = Pair.first;
+
 }
