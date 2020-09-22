@@ -1,7 +1,8 @@
-#include "record_info.h"
-#include "code_guard.h"
-#include "serializable_generator.h"
+#include "RecordInfo.h"
+#include "CodeGuard.h"
+#include "SerializableConsumer.h"
 #include "clang/AST/Attr.h"
+#include <fmt/core.h>
 #include <fstream>
 
 class ParseErrorException {};
@@ -191,42 +192,4 @@ void RecordInfo::ParseFields() {
       Entries.push_back(std::move(Entry));
     }
   }
-}
-void EntryInfo::ToCpp(std::fstream &Out, FullNameMap &Class) {
-  // get the index number
-  auto index = EntryMap[EntryName.str()];
-  if (index == 0) {
-    // no index, add new one
-    index = EntryMap.size() + 1;
-    EntryMap[EntryName.str()] = index;
-  }
-
-  Out << "// " << (Repeated ? "repeated" : "") << TypeName.str() << " "
-      << EntryName.str() << " = " << index << "\n";
-  if (!Repeated) {
-    switch (Kind) {
-    case TypeFloat:
-    case TypeDouble:
-      Out << "if (" << EntryName.str() << " < 0 || " << EntryName.str()
-          << " > 0) {\n";
-      break;
-    default:
-      Out << "if (" << EntryName.str() << " != 0) {\n";
-    }
-  } else {
-    Out << "if (" << EntryName.str() << ".size() > 0) {\n";
-  }
-
-  Out << "}\n";
-}
-void RecordInfo::ToCpp(std::fstream &Out, RecordDatabase &Database, clang::StringRef InFile) {
-  if (!isSerializable())
-    return;
-  if (Pure)
-    return;
-
-  const auto &Pair = Database.getClassByName(FullName);
-  uint32_t ID = Pair.second;
-  auto &Class = Pair.first;
-
 }

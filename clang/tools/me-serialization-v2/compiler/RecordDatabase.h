@@ -1,5 +1,5 @@
-#ifndef LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_COMPILER_RECORD_DATABASE_H_
-#define LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_COMPILER_RECORD_DATABASE_H_
+#ifndef LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_COMPILER_RECORDDATABASE_H_
+#define LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_COMPILER_RECORDDATABASE_H_
 #include <clang/Basic/FileManager.h>
 #include <clang/Basic/FileSystemOptions.h>
 #include <clang/Basic/SourceManager.h>
@@ -35,13 +35,13 @@ private:
 };
 class RecordDatabase {
 public:
-  RecordDatabase(clang::DiagnosticsEngine& Diags);
+  RecordDatabase(clang::DiagnosticsEngine &Diags);
   bool parse(llvm::StringRef InFile);
   void save();
-  std::pair<FullNameMap&, unsigned int> getClassByName(const std::string& Name);
+  std::pair<FullNameMap &, unsigned int>
+  getClassByName(const std::string &Name);
 
 private:
-
   bool parseClass(size_t &Cursor);
   bool parseFullName(size_t &Cursor, std::string &Name);
   bool expectedToken(size_t &Cursor, clang::tok::TokenKind Kind,
@@ -54,7 +54,7 @@ private:
   clang::LangOptions LangOpts;
   std::unique_ptr<llvm::MemoryBuffer> Code;
   clang::IntrusiveRefCntPtr<llvm::vfs::InMemoryFileSystem> InMemFS;
-  clang::DiagnosticsEngine& Diags;
+  clang::DiagnosticsEngine &Diags;
   clang::FileManager FileMgr;
   clang::SourceManager SM;
   clang::FileID FileID;
@@ -63,5 +63,4 @@ private:
   FullNameMap Classes;
   std::unordered_map<unsigned int, FullNameMap> ClassesToFields;
 };
-
-#endif // LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_COMPILER_RECORD_DATABASE_H_
+#endif // LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_COMPILER_RECORDDATABASE_H_

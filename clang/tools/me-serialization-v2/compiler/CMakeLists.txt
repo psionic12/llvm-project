@@ -4,11 +4,13 @@ set(LLVM_LINK_COMPONENTS
 
 add_clang_tool(serializationc
         compiler.cpp
-        record_info.cpp
-        serializable_generator.cpp
-        code_guard.cpp
+        RecordInfo.cpp
+        SerializableConsumer.cpp
+        CodeGuard.cpp
         fmt/format.cc
         fmt/os.cc
+        RecordDatabase.cpp
+        CodeGenerator.cpp
         )
 
 target_include_directories(serializationc PUBLIC ../include)

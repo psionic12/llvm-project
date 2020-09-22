@@ -9,17 +9,13 @@ add_executable(me_s11n_test
         me_s11n_core.cpp
         custom_type_s11n_test.cpp
         rtti_type_test.cpp
-        database_test.cpp)
+        database_test.cpp
+        ../compiler/RecordDatabase.cpp
+        ../compiler/fmt/format.cc
+        ../compiler/fmt/os.cc)
 target_link_libraries(me_s11n_test ${GTEST_BOTH_LIBRARIES})
 target_include_directories(me_s11n_test PUBLIC ${GTEST_INCLUDE_DIRS})
 target_link_libraries(me_s11n_test Threads::Threads)
-target_link_libraries(me_s11n_test s11n_database)
 target_include_directories(me_s11n_test PRIVATE ../include)
 
-configure_file(example_record_database.db ${CMAKE_BINARY_DIR}/bin/example_record_database.db COPYONLY)
-
 add_test(AllTests me_s11n_test)
-
-add_executable(lllll lllll.cpp ../compiler/fmt/format.cc ../compiler/fmt/os.cc)
-target_link_libraries(lllll s11n_database)
-target_include_directories(lllll PUBLIC ../include)

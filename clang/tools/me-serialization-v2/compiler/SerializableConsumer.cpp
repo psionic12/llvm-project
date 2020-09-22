@@ -1,5 +1,5 @@
-#include "serializable_generator.h"
-#include "code_guard.h"
+#include "SerializableConsumer.h"
+#include "CodeGuard.h"
 #include <clang/Basic/FileManager.h>
 #include <cstdarg>
 #include <fstream>
@@ -38,34 +38,15 @@ void SerializableConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   // got errors when parsing, do not continue
   if (HasErrors)
     return;
-
-  // now generator codes for all records
-  std::fstream Generated(GeneratedFileName, std::ios::out | std::ios::trunc);
-  HeaderGuardCoder HeaderGuard(Generated, GeneratedFileName);
-  IncludeCoder IncludeCoder(Generated, InFile);
-  for (auto &Record : Cache) {
-    Record.second.ToCpp(Cpp, Indexer);
-  }
-  Generated.close();
-  // update index file
-  Database.save();
 }
 SerializableConsumer::SerializableConsumer(clang::CompilerInstance &Compiler,
                                            llvm::StringRef InFile)
     : Visitor(*this), Context(&Compiler.getASTContext()),
-      Database(Compiler.getDiagnostics()) {
+      HeaderGen(InFile, Compiler.getDiagnostics(), Cache) {
 
   llvm::StringRef PathExt = llvm::sys::path::extension(InFile);
   if (HeaderExtensions.find(PathExt.str()) == HeaderExtensions.end()) {
     llvm::errs() << "Error: " << InFile << " seems not a header file\n";
-    std::terminate();
-  }
-
-  llvm::SmallString<128> Path(InFile);
-  llvm::sys::path::replace_extension(Path, ".s11n.h");
-  GeneratedFileName = Path.str().str();
-
-  if (!Database.parse(InFile)) {
     std::terminate();
   }
 }

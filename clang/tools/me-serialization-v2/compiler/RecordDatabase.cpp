@@ -1,4 +1,4 @@
-#include "record_database.h"
+#include "RecordDatabase.h"
 #include <clang/Basic/FileManager.h>
 #include <clang/Basic/FileSystemOptions.h>
 #include <clang/Basic/SourceManager.h>

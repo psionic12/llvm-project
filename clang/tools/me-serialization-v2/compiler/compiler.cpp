@@ -2,7 +2,7 @@
 #include "clang/Tooling/Tooling.h"
 #include "llvm/Support/CommandLine.h"
 
-#include "serializable_generator.h"
+#include "SerializableConsumer.h"
 static llvm::cl::OptionCategory serializable_category("serialization options");
 static llvm::cl::extrahelp
     common_help(clang::tooling::CommonOptionsParser::HelpMessage);
