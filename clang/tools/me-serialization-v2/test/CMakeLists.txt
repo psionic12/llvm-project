@@ -20,5 +20,6 @@ configure_file(example_record_database.db ${CMAKE_BINARY_DIR}/bin/example_record
 
 add_test(AllTests me_s11n_test)
 
-add_executable(lllll lllll.cpp)
+add_executable(lllll lllll.cpp ../compiler/fmt/format.cc ../compiler/fmt/os.cc)
 target_link_libraries(lllll s11n_database)
+target_include_directories(lllll PUBLIC ../include)

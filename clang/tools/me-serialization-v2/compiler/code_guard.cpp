@@ -1,4 +1,5 @@
 #include "code_guard.h"
+#include <fmt/core.h>
 #include <sstream>
 HeaderGuardCoder::HeaderGuardCoder(std::fstream &Out, llvm::StringRef InFile)
     : CodeGuard(Out) {
@@ -16,8 +17,8 @@ HeaderGuardCoder::HeaderGuardCoder(std::fstream &Out, llvm::StringRef InFile)
     SS << NC;
   }
   Str = SS.str();
-  Out << "#ifndef LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_" << Str << "_H_"
-      << std::endl;
+  Out << fmt::format("#ifndef LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_{}_H_", Str);
+  Out << fmt::format("#ifndef LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_{}_H_",Str);
   Out << "#define LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_" << Str << "_H_"
       << std::endl;
 }

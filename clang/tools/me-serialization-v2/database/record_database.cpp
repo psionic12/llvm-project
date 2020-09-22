@@ -183,7 +183,7 @@ bool RecordDatabase::parseIdentifier(size_t &Cursor, std::string &Name,
   return true;
 }
 bool RecordDatabase::parseField(size_t &Cursor,
-                                RecordDatabase::FullNameMap &Class) {
+                                FullNameMap &Class) {
   uint32_t Index;
   std::string Name;
   if (!parseIndex(Cursor, Index)) {

@@ -7,7 +7,11 @@ add_clang_tool(serializationc
         record_info.cpp
         serializable_generator.cpp
         code_guard.cpp
+        fmt/format.cc
+        fmt/os.cc
         )
+
+target_include_directories(serializationc PUBLIC ../include)
 
 clang_target_link_libraries(serializationc
         PRIVATE
