@@ -10,9 +10,8 @@
 #include <unordered_map>
 class RecordDatabase {
 public:
-  RecordDatabase(clang::DiagnosticsEngine &Diags, IndexManager &ClassesMgr,
-                 std::unordered_map<std::string, RecordInfo> RecordInfos);
-  bool parse(llvm::StringRef InFile);
+  RecordDatabase(clang::DiagnosticsEngine &Diags);
+  bool parse(llvm::StringRef InFile,std::unordered_map<std::string, RecordInfo&>& RecordInfos);
   void save();
 
 private:
@@ -27,7 +26,6 @@ private:
   IndexManager &getIndicesByName(llvm::StringRef Name) {
     return Classes[Name.str()];
   }
-  IndexManager& ClassesMgr;
   std::string codeGen();
   clang::LangOptions LangOpts;
   std::unique_ptr<llvm::MemoryBuffer> Code;

@@ -1,0 +1,18 @@
+
+consumer {
+check if input file is header
+get correspond database
+get correspond mes11n.obj
+is head and database of of date?
+parse header
+parse database
+serialize RecordInfos
+}
+
+linker {
+handle all mes11n.obj files
+register in record info to core
+create core.cpp
+create s11.h files
+update databases
+}

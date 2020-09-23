@@ -41,13 +41,16 @@ public:
   bool HasError() { return HasErrors; }
 
 private:
+  bool shouldParse();
   static std::set<std::string> HeaderExtensions;
   std::unordered_map<const clang::CXXRecordDecl *, RecordInfo> Cache;
   SerializableVisitor Visitor;
   clang::ASTContext *Context;
   bool HasErrors = false;
-  SingleHeaderGenerator HeaderGen;
-  RecordDatabase Database;
+  clang::StringRef InFile;
+  std::string DatabaseFile;
+  std::string ObjFile;
+  clang::DiagnosticsEngine &Diags;
 };
 
 class SerializableGenerationAction : public clang::ASTFrontendAction {

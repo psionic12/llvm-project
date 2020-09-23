@@ -8,12 +8,9 @@
 #include <clang/Tooling/Core/Replacement.h>
 #include <llvm/Support/VirtualFileSystem.h>
 #include <sstream>
-RecordDatabase::RecordDatabase(
-    clang::DiagnosticsEngine &Diags, IndexManager &ClassesMgr,
-    std::unordered_map<std::string, RecordInfo> RecordInfos)
-    : ClassesMgr(ClassesMgr), InMemFS(new llvm::vfs::InMemoryFileSystem),
-      Diags(Diags), FileMgr(clang::FileSystemOptions(), InMemFS),
-      SM(Diags, FileMgr) {
+RecordDatabase::RecordDatabase(clang::DiagnosticsEngine &Diags)
+    : InMemFS(new llvm::vfs::InMemoryFileSystem), Diags(Diags),
+      FileMgr(clang::FileSystemOptions(), InMemFS), SM(Diags, FileMgr) {
   LangOpts.CPlusPlus = true;
   err_expected_token = Diags.getCustomDiagID(clang::DiagnosticsEngine::Error,
                                              "expected token %0");
@@ -25,24 +22,21 @@ RecordDatabase::RecordDatabase(
                                                "index %0 duplicated");
 }
 bool RecordDatabase::loadData(clang::StringRef InFile) {
-  llvm::SmallString<128> Path(InFile);
-  llvm::sys::path::replace_extension(Path, ".db");
-
   auto FDOrErr = llvm::sys::fs::openNativeFileForReadWrite(
-      Path, llvm::sys::fs::CD_OpenAlways, llvm::sys::fs::OF_None);
+      InFile, llvm::sys::fs::CD_OpenAlways, llvm::sys::fs::OF_None);
   if (!FDOrErr) {
     llvm::errs() << FDOrErr.takeError() << "\n";
     return false;
   }
   uint64_t FileSize;
-  if (llvm::sys::fs::file_size(Path, FileSize)) {
+  if (llvm::sys::fs::file_size(InFile, FileSize)) {
     llvm::errs() << "failed to get file size"
                  << "\n";
     return false;
   }
   llvm::sys::fs::file_t FD = *FDOrErr;
   llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> DataOrError =
-      llvm::MemoryBuffer::getOpenFile(FD, Path, FileSize);
+      llvm::MemoryBuffer::getOpenFile(FD, InFile, FileSize);
   llvm::sys::fs::closeFile(FD);
 
   if (std::error_code EC = DataOrError.getError()) {
@@ -52,14 +46,16 @@ bool RecordDatabase::loadData(clang::StringRef InFile) {
     return true;
   }
   Code = std::move(DataOrError.get());
-  InMemFS->addFileNoOwn(Path, 0, Code.get());
-  auto File = FileMgr.getFile(Path);
+  InMemFS->addFileNoOwn(InFile, 0, Code.get());
+  auto File = FileMgr.getFile(InFile);
   FileID = SM.createFileID(File ? *File : nullptr, clang::SourceLocation(),
                            clang::SrcMgr::C_User);
   LexerPtr = std::make_unique<clang::Lexer>(FileID, Code.get(), SM, LangOpts);
   return true;
 }
-bool RecordDatabase::parse(llvm::StringRef InFile) {
+bool RecordDatabase::parse(
+    llvm::StringRef InFile,
+    std::unordered_map<std::string, RecordInfo &> &RecordInfos) {
 
   if (!loadData(InFile)) {
     return false;
