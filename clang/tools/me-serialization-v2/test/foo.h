@@ -23,7 +23,8 @@ public:
   std::string f13 = "f13";
   float f14[4] = {1.0, 0.1, 0.01, 0.001};
   char f15[5] = "skip";
-  std::unique_ptr<int> f16 = std::make_unique<int>(1);
+  // std::unique_ptr<int> f16 = std::make_unique<int>(1); // ptr for
+  // non-polymorphic type not supported
 };
 
 #endif // LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_TEST_FOO_H_

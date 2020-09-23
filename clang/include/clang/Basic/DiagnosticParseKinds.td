@@ -1440,9 +1440,4 @@ def warn_max_tokens_total : Warning<
 
 def note_max_tokens_total_override : Note<"total token limit set here">;
 
-// diagnostics used for mes11n
-def mes11n_err_expected_token : Error<"expected token %0">;
-def mes11n_err_invalid_index : Error<"invalid index %0">;
-def mes11n_err_index_max : Error<"index is longger than 32 bits">;
-
 } // end of Parser diagnostics

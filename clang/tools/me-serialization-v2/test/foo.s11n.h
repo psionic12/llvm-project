@@ -24,7 +24,7 @@ template <> struct Coder<Foo> {
     ptr = WriteField(13, value.f13, ptr);
     ptr = WriteField(14, value.f14, ptr);
     ptr = WriteField(15, value.f15, ptr);
-    ptr = WriteField(16, value.f16, ptr);
+//    ptr = WriteField(16, value.f16, ptr);
     return ptr;
   }
   static const uint8_t *Read(Foo &out, const uint8_t *ptr) {
@@ -87,9 +87,9 @@ template <> struct Coder<Foo> {
         //      case 15:
         //        ptr = ReadRaw(out.f15, ptr);
         //        break;
-      case 16:
-        ptr = ReadRaw(out.f16, ptr);
-        break;
+//      case 16:
+//        ptr = ReadRaw(out.f16, ptr);
+//        break;
       default: {
         ptr = SkipUnknown(tag, ptr);
       }
@@ -114,7 +114,7 @@ template <> struct Coder<Foo> {
     size += FieldSize<13>(value.f13);
     size += FieldSize<14>(value.f14);
     size += FieldSize<15>(value.f15);
-    size += FieldSize<16>(value.f16);
+//    size += FieldSize<16>(value.f16);
     size += SizeRaw(size);
     return size;
   }

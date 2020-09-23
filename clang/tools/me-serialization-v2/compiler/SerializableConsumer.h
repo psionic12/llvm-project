@@ -1,6 +1,7 @@
 #ifndef LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_SERIALIZABLE_GENERATOR_H_
 #define LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_SERIALIZABLE_GENERATOR_H_
 #include "CodeGenerator.h"
+#include "RecordDatabase.h"
 #include "RecordInfo.h"
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/RecursiveASTVisitor.h"
@@ -46,6 +47,7 @@ private:
   clang::ASTContext *Context;
   bool HasErrors = false;
   SingleHeaderGenerator HeaderGen;
+  RecordDatabase Database;
 };
 
 class SerializableGenerationAction : public clang::ASTFrontendAction {

@@ -3,16 +3,12 @@
 #include <fmt/format.h>
 #include <fstream>
 SingleHeaderGenerator::SingleHeaderGenerator(
-    llvm::StringRef InFile, clang::DiagnosticsEngine &Diags,
+    llvm::StringRef InFile,
     std::unordered_map<const clang::CXXRecordDecl *, RecordInfo> &Cache)
-    : InFile(InFile), Database(Diags), Cache(Cache) {
+    : InFile(InFile), Cache(Cache) {
   llvm::SmallString<128> Path(InFile);
   llvm::sys::path::replace_extension(Path, ".s11n.h");
   FileName = Path.str().str();
-
-  if (!Database.parse(InFile)) {
-    std::terminate();
-  }
 }
 SingleHeaderGenerator::~SingleHeaderGenerator() {
   // now generator codes for all records
@@ -35,8 +31,7 @@ void SingleHeaderGenerator::recordGen(std::fstream &Out,
 
   llvm::StringRef FullName = RecordInfo.fullName();
   auto& Entries = RecordInfo.entries();
-  const auto &Pair = Database.getClassByName(FullName.str());
-  auto &Class = Pair.first;
+  auto &Class = Classes[FullName.str()];
 
   Out << fmt::format("template <> struct Coder<{}> {{\n", FullName.data());
   Out << fmt::format(
@@ -88,4 +83,21 @@ void SingleHeaderGenerator::recordGen(std::fstream &Out,
          "    return size;\n"
          "  }\n";
   Out << "};\n";
+}
+CoreCppGenerator::CoreCppGenerator() {
+
+}
+CoreCppGenerator::~CoreCppGenerator() {
+
+}
+void CoreCppGenerator::recordGen(std::fstream &Out) {
+  Out << "#include \"base_derive.s11n.h\"\n";
+  for (auto Include : Includes) {
+    Out << fmt::format("#include \"{}\"\n", Include);
+  }
+  NamespaceCoder NamespaceMe(Out, "me");
+  NamespaceCoder NamespaceS11n(Out, "s11n");
+}
+void CoreCppGenerator::registerClassID(llvm::StringRef Name, std::size_t ID) {
+
 }

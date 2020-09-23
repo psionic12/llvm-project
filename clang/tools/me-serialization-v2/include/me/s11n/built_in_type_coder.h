@@ -235,8 +235,10 @@ template <typename T>
   }
   static constexpr std::size_t Size(T value) { return sizeof(T); }
 };
-// unique_ptr Type
-template <typename T, typename... Ts> struct Coder<std::unique_ptr<T, Ts...>> {
+// unique_ptr Type for polymorphic type
+template <typename T, typename... Ts>
+struct Coder<std::unique_ptr<T, Ts...>,
+             typename std::enable_if_t<std::is_polymorphic<T>::value>> {
   static uint8_t *Write(const std::unique_ptr<T, Ts...> &unique_ptr,
                         uint8_t *ptr) {
     // TODO do I need to check the existence?
@@ -257,6 +259,33 @@ template <typename T, typename... Ts> struct Coder<std::unique_ptr<T, Ts...>> {
   static std::size_t Size(const std::unique_ptr<T, Ts...> &unique_ptr) {
     std::size_t id = CoderWrapper::CppIdToIdMap[typeid(id)];
     return SizeRaw(id) + SizeRaw(*unique_ptr);
+  }
+};
+template <typename T, typename... Ts>
+struct Coder<std::unique_ptr<T, Ts...>,
+             typename std::enable_if_t<!std::is_polymorphic<T>::value>> {
+  static uint8_t *Write(const std::unique_ptr<T, Ts...> &unique_ptr,
+                        uint8_t *ptr) {
+    static_assert(
+        DeferredFalse<T>::value,
+        "due to ownership principle, ptr of a non polymorphic type makes "
+        "little sense, please issue us if you has a reasonable case");
+    return nullptr;
+  }
+  static const uint8_t *Read(std::unique_ptr<T, Ts...> &unique_ptr,
+                             const uint8_t *ptr) {
+    static_assert(
+        DeferredFalse<T>::value,
+        "due to ownership principle, ptr of a non polymorphic type makes "
+        "little sense, please issue us if you has a reasonable case");
+    return nullptr;
+  }
+  static std::size_t Size(const std::unique_ptr<T, Ts...> &unique_ptr) {
+    static_assert(
+        DeferredFalse<T>::value,
+        "due to ownership principle, ptr of a non polymorphic type makes "
+        "little sense, please issue us if you has a reasonable case");
+    return 0;
   }
 };
 // encoder for arrays which element is varint
@@ -383,7 +412,7 @@ template <> struct Coder<std::string> {
   }
 };
 
-} // namespace serialization
+} // namespace s11n
 } // namespace me
 
 #endif // LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_SERIALIZATION_BUILT_IN_TYPE_CODER_H_

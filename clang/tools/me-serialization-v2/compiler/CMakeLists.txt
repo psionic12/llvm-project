@@ -11,6 +11,7 @@ add_clang_tool(serializationc
         fmt/os.cc
         RecordDatabase.cpp
         CodeGenerator.cpp
+        IndexManager.cpp
         )
 
 target_include_directories(serializationc PUBLIC ../include)

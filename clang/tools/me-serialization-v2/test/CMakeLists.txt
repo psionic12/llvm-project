@@ -17,5 +17,11 @@ target_link_libraries(me_s11n_test ${GTEST_BOTH_LIBRARIES})
 target_include_directories(me_s11n_test PUBLIC ${GTEST_INCLUDE_DIRS})
 target_link_libraries(me_s11n_test Threads::Threads)
 target_include_directories(me_s11n_test PRIVATE ../include)
+target_link_libraries(me_s11n_test
+        clangBasic
+        clangLex
+        clangFrontend
+        clangToolingCore
+        clangRewrite)
 
 add_test(AllTests me_s11n_test)

@@ -42,11 +42,15 @@ void SerializableConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
 SerializableConsumer::SerializableConsumer(clang::CompilerInstance &Compiler,
                                            llvm::StringRef InFile)
     : Visitor(*this), Context(&Compiler.getASTContext()),
-      HeaderGen(InFile, Compiler.getDiagnostics(), Cache) {
+      HeaderGen(InFile, Cache) {
 
   llvm::StringRef PathExt = llvm::sys::path::extension(InFile);
   if (HeaderExtensions.find(PathExt.str()) == HeaderExtensions.end()) {
     llvm::errs() << "Error: " << InFile << " seems not a header file\n";
+    std::terminate();
+  }
+
+  if (!Database.parse(InFile)) {
     std::terminate();
   }
 }

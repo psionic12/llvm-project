@@ -1,12 +1,12 @@
-(1) me::test::Foo {
-(1) i
-(2) j
-(3) k
+me::test::Foo {
+i%1
+j%2
+k%3
 }
-(2) me::test::Bar{
-(1) i
-(2) j
-(3) k
-(4) a
-(5) b
+me::test::Bar%1{
+i%1
+j%2
+k%3
+a%4
+b%5
 }

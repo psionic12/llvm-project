@@ -8,15 +8,24 @@
 class SingleHeaderGenerator {
 public:
   SingleHeaderGenerator(
-      llvm::StringRef InFile, clang::DiagnosticsEngine &Diags,
+      llvm::StringRef InFile,
       std::unordered_map<const clang::CXXRecordDecl *, RecordInfo> &Cache);
   ~SingleHeaderGenerator();
 
 private:
-  void recordGen(std::fstream &Out, RecordInfo& RecordInfo);
+  void recordGen(std::fstream &Out, RecordInfo &RecordInfo);
   llvm::StringRef InFile;
   std::string FileName;
-  RecordDatabase Database;
   std::unordered_map<const clang::CXXRecordDecl *, RecordInfo> &Cache;
+};
+
+class CoreCppGenerator {
+public:
+  CoreCppGenerator();
+  ~CoreCppGenerator();
+  void registerClassID(llvm::StringRef Name, std::size_t ID);
+private:
+  void recordGen(std::fstream &Out);
+  std::vector<llvm::StringRef> Includes;
 };
 #endif // LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_COMPILER_CODEGENERATOR_H_
