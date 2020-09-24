@@ -1,6 +1,7 @@
 #ifndef LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_RECORD_INFO_H_
 #define LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_RECORD_INFO_H_
 #include "clang/AST/Type.h"
+#include <unordered_map>
 class SerializableConsumer;
 enum EntryKind {
   TypeBool,
@@ -26,40 +27,57 @@ enum RepeatedKind {
 
 class EntryInfo {
 public:
-  EntryInfo(SerializableConsumer &Consumer, const clang::Type *Type,
+  EntryInfo(SerializableConsumer *Consumer, const clang::Type *Type,
             const clang::NamedDecl *NamedDecl);
-  void AddCategory(clang::StringRef category) {
+  void addCategory(clang::StringRef category) {
     Categories.emplace_back(category);
   }
-  clang::StringRef entryName() {return EntryName;}
+  void setID(uint32_t ID) { this->RecordID = ID; }
+  clang::StringRef entryName() { return EntryName; }
+  // called when this record appears in database.
+  void setNotNew() { IsNew = false; }
+  bool isNew() { return IsNew; }
+  void toObjFile(std::stringstream &SS);
 
 private:
   friend class RecordInfo;
-  SerializableConsumer &Consumer;
-  clang::StringRef TypeName;
-  clang::StringRef EntryName;
-  std::vector<clang::StringRef> Categories;
-  RepeatedKind Repeated = None;
-  EntryKind Kind;
+  SerializableConsumer *Consumer;
+  std::string EntryName;
+  std::vector<std::string> Categories;
+  uint32_t RecordID = 0;
+  bool IsNew = true;
 };
 
 class RecordInfo {
 public:
-  RecordInfo(SerializableConsumer &Consumer,
+  RecordInfo(SerializableConsumer *Consumer,
              const clang::CXXRecordDecl *RecordDecl);
-  void ParseFields();
+  void parseFields();
   bool isSerializable() const { return Serializable; }
   bool pure() { return Pure; }
+  void setID(uint32_t ID) { RecordID = ID; }
+  bool isPolymorphic() { return Polymorphic; }
+  // called when this record appears in database.
+  void setNotNew() { IsNew = false; }
+  bool isNew() { return IsNew; }
   clang::StringRef fullName() { return FullName; }
-  std::vector<EntryInfo> &entries() { return Entries; }
+  std::unordered_map<std::string, EntryInfo> &entries() { return Entries; }
+  void toObjFile(std::string &String);
 
 private:
-  SerializableConsumer &Consumer;
+  SerializableConsumer *Consumer;
   bool Serializable = false;
   bool Pure = false;
+  // 1
   std::string FullName;
-  std::vector<const RecordInfo *> Bases;
-  std::vector<EntryInfo> Entries;
+  // 2
+  std::unordered_map<std::string, EntryInfo> Entries;
   const clang::CXXRecordDecl *RecordDecl;
+  // 3
+  uint32_t RecordID = 0;
+  // 4
+  bool Polymorphic = false;
+  // 5
+  bool IsNew = true;
 };
 #endif // LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_RECORD_INFO_H_

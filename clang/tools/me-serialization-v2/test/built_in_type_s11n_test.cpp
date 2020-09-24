@@ -25,9 +25,14 @@ TEST_F(BuiltInTypeSerializeTest, int_test) {
   ptr = me::s11n::WriteRaw(vd, ptr);
   std::vector<uint32_t> v_uint32_t{1, 2, 3, 4, 1000};
   ptr = me::s11n::WriteRaw(
-      *(reinterpret_cast<std::vector<me::s11n::strong_uint32> *>(
-          &v_uint32_t)),
+      *(reinterpret_cast<std::vector<me::s11n::strong_uint32> *>(&v_uint32_t)),
       ptr);
+  std::pair<std::string, int> pair{"One", 1};
+  ptr = me::s11n::WriteRaw(pair, ptr);
+  std::map<std::string, int> map{{"One", 1}, {"Two", 2}};
+  ptr = me::s11n::WriteRaw(map, ptr);
+  std::unordered_map<std::string, int> unordered_map{{"One", 1}, {"Two", 2}};
+  ptr = me::s11n::WriteRaw(unordered_map, ptr);
 
   const uint8_t *cptr = buffer;
   int i2;
@@ -59,17 +64,26 @@ TEST_F(BuiltInTypeSerializeTest, int_test) {
   EXPECT_TRUE(vd == vd2);
   std::vector<uint32_t> v2_uint32_t;
   cptr = me::s11n::ReadRaw(
-      *(reinterpret_cast<std::vector<me::s11n::strong_uint32> *>(
-          &v2_uint32_t)),
+      *(reinterpret_cast<std::vector<me::s11n::strong_uint32> *>(&v2_uint32_t)),
       cptr);
   EXPECT_TRUE(v_uint32_t == v2_uint32_t);
+  std::pair<std::string, int> pair2;
+  cptr = me::s11n::ReadRaw(pair2, cptr);
+  EXPECT_TRUE(pair == pair2);
+
+  std::map<std::string, int> map2;
+  cptr = me::s11n::ReadRaw(map2, cptr);
+  EXPECT_TRUE(map == map2);
+
+  std::unordered_map<std::string, int> unordered_map2;
+  cptr = me::s11n::ReadRaw(unordered_map2, cptr);
+  EXPECT_TRUE(unordered_map == unordered_map2);
 }
 
 TEST_F(BuiltInTypeSerializeTest, constexpr_test) {
   constexpr int cstxpr = 10086;
   int non_cstxpr = cstxpr;
-  int non_cstxpr_size =
-      me::s11n::Log2FloorHelper::Log2Floor(non_cstxpr);
+  int non_cstxpr_size = me::s11n::Log2FloorHelper::Log2Floor(non_cstxpr);
   constexpr int cstxpr_size =
       me::s11n::Log2FloorHelper::Log2FloorConstexpr(cstxpr);
   ASSERT_EQ(non_cstxpr_size, cstxpr_size);

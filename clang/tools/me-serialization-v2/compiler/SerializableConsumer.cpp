@@ -37,7 +37,7 @@ void SerializableConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   Visitor.TraverseDecl(Context.getTranslationUnitDecl());
   // now parse the fields of each record
   for (auto &Record : Cache) {
-    Record.second.ParseFields();
+    Record.second.parseFields();
   }
   // got errors when parsing, do not continue
   if (HasErrors)
@@ -50,13 +50,14 @@ void SerializableConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   }
 
   // parse database
-  RecordDatabase Database(Diags, RecordInfoMap);
-  Database.parse(DatabaseFile);
+  auto &Database = ChangedDatabase.emplace(InFile, Diags).first->second;
+  Database.parse(DatabaseFile, RecordInfoMap);
 }
-SerializableConsumer::SerializableConsumer(clang::CompilerInstance &Compiler,
-                                           llvm::StringRef InFile)
+SerializableConsumer::SerializableConsumer(
+    clang::CompilerInstance &Compiler, llvm::StringRef InFile,
+    std::unordered_map<std::string, RecordDatabase> &ChangedDatabase)
     : Visitor(*this), Context(&Compiler.getASTContext()), InFile(InFile),
-      Diags(Compiler.getDiagnostics()) {
+      Diags(Compiler.getDiagnostics()), ChangedDatabase(ChangedDatabase) {
 
   // check if input file is header
   llvm::StringRef PathExt = llvm::sys::path::extension(InFile);
@@ -84,9 +85,5 @@ bool SerializableConsumer::shouldParse() {
   auto LastDatabaseFile = file_status.getLastModificationTime();
   llvm::sys::fs::status(ObjFile, file_status);
   auto LastObjFile = file_status.getLastModificationTime();
-  if (LastInFile < LastObjFile && LastDatabaseFile < LastObjFile) {
-    return true;
-  } else {
-    return false;
-  }
+  return LastInFile < LastObjFile && LastDatabaseFile < LastObjFile;
 }

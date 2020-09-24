@@ -20,6 +20,9 @@ RecordDatabase::RecordDatabase(clang::DiagnosticsEngine &Diags)
                                         "index is longger than 32 bits");
   err_duplicated_index = Diags.getCustomDiagID(clang::DiagnosticsEngine::Error,
                                                "index %0 duplicated");
+  err_not_polymorphic =
+      Diags.getCustomDiagID(clang::DiagnosticsEngine::Error,
+                            "non-polymorphic types cannot have an index");
 }
 bool RecordDatabase::loadData(clang::StringRef InFile) {
   auto FDOrErr = llvm::sys::fs::openNativeFileForReadWrite(
@@ -65,8 +68,6 @@ bool RecordDatabase::parse(
     return true;
 
   auto &Lexer = *LexerPtr;
-  Classes.clear();
-  Classes.clear();
   Tokens.clear();
 
   Diags.getClient()->BeginSourceFile(LangOpts);
@@ -80,7 +81,7 @@ bool RecordDatabase::parse(
   std::size_t i = 0;
   bool success = true;
   while (i < Tokens.size() - 1) {
-    if (!parseClass(i)) {
+    if (!parseClass(i, RecordInfos)) {
       success = false;
       break;
     }
@@ -88,20 +89,24 @@ bool RecordDatabase::parse(
   Diags.getClient()->EndSourceFile();
   return success;
 }
-bool RecordDatabase::parseClass(size_t &Cursor) {
+bool RecordDatabase::parseClass(
+    size_t &Cursor,
+    std::unordered_map<std::string, RecordInfo &> &RecordInfos) {
   uint32_t Index;
   std::string Name;
   if (!parseFullName(Cursor, Name)) {
     return false;
   }
+  RecordInfo &RecordInfo = RecordInfos[Name];
+  RecordInfo.setNotNew();
   if (expectedToken(Cursor, clang::tok::percent, true)) {
     if (parseIndex(Cursor, Index)) {
-      // register ID
-      if (!ClassesMgr.emplace(Name, Index)) {
-        Diags.Report(Tokens[--Cursor].getLocation(), err_duplicated_index)
-            << Index;
+      if (!RecordInfo.isPolymorphic()) {
+        Diags.Report(Tokens[Cursor--].getLocation(), err_not_polymorphic);
+        return false;
       }
-      // TODO check if class is non-polymorphic
+      // register ID
+      RecordInfo.setID(Index);
       return true;
     }
     return false;
@@ -109,11 +114,10 @@ bool RecordDatabase::parseClass(size_t &Cursor) {
   if (!expectedToken(Cursor, clang::tok::l_brace)) {
     return false;
   }
-  auto &Class = Classes[Name];
 
   while (expectedToken(Cursor, clang::tok::l_paren, true)) {
     Cursor--;
-    if (!parseField(Cursor, Class)) {
+    if (!parseField(Cursor, RecordInfo)) {
       return false;
     }
   }
@@ -189,7 +193,7 @@ bool RecordDatabase::parseIdentifier(size_t &Cursor, std::string &Name,
   };
   return true;
 }
-bool RecordDatabase::parseField(size_t &Cursor, IndexManager &Class) {
+bool RecordDatabase::parseField(size_t &Cursor, RecordInfo &RecordInfo) {
   uint32_t Index;
   std::string Name;
   if (!parseIdentifier(Cursor, Name, false)) {
@@ -199,10 +203,9 @@ bool RecordDatabase::parseField(size_t &Cursor, IndexManager &Class) {
     return false;
   } else {
     if (parseIndex(Cursor, Index)) {
-      if (!Class.emplace(Name, Index)) {
-        Diags.Report(Tokens[--Cursor].getLocation(), err_duplicated_index)
-            << Index;
-      }
+      EntryInfo &EntryInfo = RecordInfo.entries()[Name];
+      EntryInfo.setID(Index);
+      EntryInfo.setNotNew();
     } else {
       return false;
     }

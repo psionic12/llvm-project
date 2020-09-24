@@ -5,6 +5,7 @@
 #include "log2_floor_helper.h"
 #include "port.h"
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
 #include <typeindex>
@@ -221,6 +222,24 @@ struct Coder<T, typename std::enable_if_t<GraininessWrapper<T>::type ==
     return Coder<UnsignedT>::template ConstexprSize<zig_zag_value>();
   }
 };
+
+// enum type encoder
+template <typename T>
+struct Coder<T, typename std::enable_if_t<std::is_enum<T>::value>> {
+  static uint8_t *Write(T value, uint8_t *ptr) {
+    return Coder<unsigned>::Write(static_cast<unsigned>(value), ptr);
+  }
+  static const uint8_t *Read(T &out, const uint8_t *ptr) {
+    unsigned index;
+    ptr = Coder<unsigned>::Read(index, ptr);
+    out = static_cast<T>(index);
+    return ptr;
+  }
+  static constexpr std::size_t Size(T value) {
+    return Coder<unsigned>::Size(static_cast<unsigned>(value));
+  }
+};
+
 // fixed size encoder
 template <typename T>
     struct Coder < T,
@@ -409,6 +428,52 @@ template <> struct Coder<std::string> {
   static std::size_t Size(const std::string &s) {
     auto string_size = s.size();
     return Coder<decltype(string_size)>::Size(string_size) + s.size();
+  }
+};
+
+// coder for std::pair
+template <typename T1, typename T2> struct Coder<std::pair<T1, T2>> {
+  static uint8_t *Write(const std::pair<T1, T2> &value, uint8_t *ptr) {
+    ptr = Coder<T1>::Write(value.first, ptr);
+    ptr = Coder<T2>::Write(value.second, ptr);
+    return ptr;
+  }
+  static const uint8_t *Read(std::pair<T1, T2> &out, const uint8_t *ptr) {
+    ptr = Coder<T1>::Read(out.first, ptr);
+    ptr = Coder<T2>::Read(out.second, ptr);
+    return ptr;
+  }
+  static std::size_t Size(const std::pair<T1, T2> &value) {
+    return Coder<T1>::Size(value.first) + Coder<T2>::Size(value.second);
+  }
+};
+
+// coder for maps
+template <template <typename, typename, typename...> class MAP, typename KEY,
+          typename VALUE, typename... TS>
+struct Coder<
+    MAP<KEY, VALUE, TS...>,
+    typename std::enable_if_t<
+        is_specialization<MAP<KEY, VALUE, TS...>, std::unordered_map>::value ||
+        is_specialization<MAP<KEY, VALUE, TS...>, std::map>::value>> {
+  static uint8_t *Write(const MAP<KEY, VALUE, TS...> &value, uint8_t *ptr) {
+    for (const auto &Pair : value) {
+      ptr = Coder<decltype(Pair)>::Write(Pair, ptr);
+    }
+    return ptr;
+  }
+  static const uint8_t *Read(MAP<KEY, VALUE, TS...> &out, const uint8_t *ptr) {
+    for (auto &Pair : out) {
+      ptr = Coder<decltype(Pair)>::Read(Pair, ptr);
+    }
+    return ptr;
+  }
+  static std::size_t Size(const MAP<KEY, VALUE, TS...> &value) {
+    std::size_t size = 0;
+    for (const auto &Pair : value) {
+      size += Coder<decltype(Pair)>::Size(Pair);
+    }
+    return size;
   }
 };
 

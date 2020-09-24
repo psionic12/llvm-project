@@ -15,17 +15,14 @@ public:
   void save();
 
 private:
-  bool parseClass(size_t &Cursor);
+  bool parseClass(size_t &Cursor, std::unordered_map<std::string, RecordInfo &> &RecordInfos);
   bool parseFullName(size_t &Cursor, std::string &Name);
   bool expectedToken(size_t &Cursor, clang::tok::TokenKind Kind,
                      bool CanFail = false);
   bool parseIndex(size_t &Cursor, uint32_t &Index);
   bool parseIdentifier(size_t &Cursor, std::string &Name, bool Append);
-  bool parseField(size_t &Cursor, IndexManager &Class);
+  bool parseField(size_t &Cursor, RecordInfo &RecordInfo);
   bool loadData(clang::StringRef InFile);
-  IndexManager &getIndicesByName(llvm::StringRef Name) {
-    return Classes[Name.str()];
-  }
   std::string codeGen();
   clang::LangOptions LangOpts;
   std::unique_ptr<llvm::MemoryBuffer> Code;
@@ -36,11 +33,11 @@ private:
   clang::FileID FileID;
   std::unique_ptr<clang::Lexer> LexerPtr;
   std::vector<clang::Token> Tokens;
-  std::unordered_map<std::string, IndexManager> Classes;
-  std::map<long, clang::StringRef> LocalClassIdCopies;
+
   unsigned err_expected_token;
   unsigned err_invalid_index;
   unsigned err_index_max;
   unsigned err_duplicated_index;
+  unsigned err_not_polymorphic;
 };
 #endif // LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_COMPILER_RECORDDATABASE_H_

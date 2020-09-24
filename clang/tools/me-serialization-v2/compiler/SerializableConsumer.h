@@ -19,8 +19,9 @@ private:
 
 class SerializableConsumer : public clang::ASTConsumer {
 public:
-  SerializableConsumer(clang::CompilerInstance &Compiler,
-                       llvm::StringRef InFile);
+  SerializableConsumer(
+      clang::CompilerInstance &Compiler, llvm::StringRef InFile,
+      std::unordered_map<std::string, RecordDatabase> &ChangedDatabase);
   void LogWarning(const clang::Decl *Decl, const char *Format, ...);
 
   void LogError(const clang::Decl *Decl, const char *format, ...);
@@ -51,14 +52,6 @@ private:
   std::string DatabaseFile;
   std::string ObjFile;
   clang::DiagnosticsEngine &Diags;
-};
-
-class SerializableGenerationAction : public clang::ASTFrontendAction {
-public:
-  virtual std::unique_ptr<clang::ASTConsumer>
-  CreateASTConsumer(clang::CompilerInstance &Compiler, llvm::StringRef InFile) {
-    return std::unique_ptr<clang::ASTConsumer>(
-        new SerializableConsumer(Compiler, InFile));
-  }
+  std::unordered_map<std::string, RecordDatabase> &ChangedDatabase;
 };
 #endif // LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_SERIALIZABLE_GENERATOR_H_

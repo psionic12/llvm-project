@@ -1,108 +1,17 @@
 #include "RecordInfo.h"
 #include "CodeGuard.h"
 #include "SerializableConsumer.h"
+#include "me/s11n/field_coder.h"
 #include "clang/AST/Attr.h"
 #include <fmt/core.h>
 #include <fstream>
 
 class ParseErrorException {};
-EntryInfo::EntryInfo(SerializableConsumer &Consumer, const clang::Type *Type,
+EntryInfo::EntryInfo(SerializableConsumer *Consumer, const clang::Type *Type,
                      const clang::NamedDecl *NamedDecl)
-    : Consumer(Consumer), EntryName(NamedDecl->getName()) {
-  const auto *ElementType = Type;
-  // check if Type is vector<T>
-  if (const auto *TST =
-          ElementType->getAs<clang::TemplateSpecializationType>()) {
-    clang::StringRef TemlateName = TST->getTemplateName()
-                                       .getAsQualifiedTemplateName()
-                                       ->getDecl()
-                                       ->getName();
-    if (TemlateName == "std::vector" || TemlateName == "std::list" ||
-        TemlateName == "std::forward_list") {
-      // template<typename _Tp, typename _Alloc = std::allocator<_Tp> >
-      const clang::TemplateArgument &Arg = TST->getArg(0);
-      ElementType = Arg.getAsType().getTypePtr();
-      if (TemlateName == "std::vector" || TemlateName == "std::list")
-        Repeated = STLVectorOrList;
-      else if (TemlateName == "std::forward_list")
-        Repeated = STLForwardList;
-    }
-  }
-
-  // check if Type is vector<unique_ptr<T>>
-  if (const auto *TST =
-          ElementType->getAs<clang::TemplateSpecializationType>()) {
-    clang::StringRef TemlateName = TST->getTemplateName()
-                                       .getAsQualifiedTemplateName()
-                                       ->getDecl()
-                                       ->getName();
-    if (TemlateName == "std::unique_ptr" || TemlateName == "std::shared_ptr") {
-      // template<typename _Tp, (typename _Alloc = std::allocator<_Tp>)? >
-      const clang::TemplateArgument &Arg = TST->getArg(0);
-      ElementType = Arg.getAsType().getTypePtr();
-    }
-  }
-
-  if (const auto *BuiltinType = ElementType->getAs<clang::BuiltinType>()) {
-    BuiltinType->isInteger();
-    TypeName = BuiltinType->getName(Consumer.getPrintingPolicy());
-    switch (BuiltinType->getKind()) {
-    case clang::BuiltinType::Bool:
-      Kind = TypeBool;
-      break;
-    case clang::BuiltinType::Char_U:
-    case clang::BuiltinType::UChar:
-      Kind = TypeUchar;
-      break;
-    case clang::BuiltinType::Char_S:
-    case clang::BuiltinType::SChar:
-      Kind = TypeChar;
-      break;
-    case clang::BuiltinType::Float:
-      Kind = TypeFloat;
-      break;
-    case clang::BuiltinType::Double:
-    case clang::BuiltinType::LongDouble:
-      Kind = TypeDouble;
-      break;
-    case clang::BuiltinType::Short:
-      Kind = TypeInt16;
-      break;
-    case clang::BuiltinType::Int:
-      Kind = TypeInt32;
-      break;
-    case clang::BuiltinType::Long:
-    case clang::BuiltinType::LongLong:
-      Kind = TypeInt64;
-      break;
-    case clang::BuiltinType::UShort:
-      Kind = TypeUint16;
-      break;
-    case clang::BuiltinType::UInt:
-      Kind = TypeUint32;
-      break;
-    case clang::BuiltinType::ULong:
-    case clang::BuiltinType::ULongLong:
-      Kind = TypeUint64;
-      break;
-    default:
-      Consumer.LogError(NamedDecl, "unsupported built-in type : %s",
-                        TypeName.data());
-      Kind = TypeUnknown;
-    }
-  } else {
-    const auto *RecordDecl = ElementType->getAsCXXRecordDecl();
-    if (RecordDecl && Consumer.getRecord(RecordDecl).isSerializable()) {
-      Kind = TypePointer;
-      TypeName = RecordDecl->getName();
-    } else {
-      Kind = TypeUnknown;
-      Consumer.LogError(ElementType->getAsCXXRecordDecl(),
-                        "type is not a Serializable type");
-    }
-  }
-}
-RecordInfo::RecordInfo(SerializableConsumer &Consumer,
+    : Consumer(Consumer), EntryName(NamedDecl->getName()) {}
+void EntryInfo::toObjFile(std::stringstream &SS) {}
+RecordInfo::RecordInfo(SerializableConsumer *Consumer,
                        const clang::CXXRecordDecl *RecordDecl)
     : Consumer(Consumer), RecordDecl(RecordDecl) {
   FullName = RecordDecl->getQualifiedNameAsString();
@@ -110,12 +19,12 @@ RecordInfo::RecordInfo(SerializableConsumer &Consumer,
   // parse all base classes
   for (const auto &CXXBaseSpecifier : RecordDecl->bases()) {
     if (CXXBaseSpecifier.isVirtual()) {
-      Consumer.LogWarning(RecordDecl,
-                          "Do not support virtual inheritance, ignore");
+      Consumer->LogWarning(RecordDecl,
+                           "Do not support virtual inheritance, ignore");
       return;
     } else {
       const auto *BaseDecl = RecordDecl->getTypeForDecl()->getAsCXXRecordDecl();
-      const RecordInfo &BaseInfo = Consumer.getRecord(BaseDecl);
+      const RecordInfo &BaseInfo = Consumer->getRecord(BaseDecl);
       if (BaseInfo.Serializable) {
         Serializable = true;
         return;
@@ -135,7 +44,10 @@ RecordInfo::RecordInfo(SerializableConsumer &Consumer,
     }
   }
 }
-void RecordInfo::ParseFields() {
+void RecordInfo::parseFields() {
+  if (!Consumer)
+    return;
+
   // not a serializable, not need further parsing.
   if (!Serializable)
     return;
@@ -150,23 +62,23 @@ void RecordInfo::ParseFields() {
     if (auto *SerializedAttr = Method->getAttr<clang::MESerializedAttr>()) {
       // only support reference getter style
       if (Method->param_size() > 0) {
-        Consumer.LogError(Method, "getter cannot have parameters");
+        Consumer->LogError(Method, "getter cannot have parameters");
       }
       auto QualReturnType = Method->getDeclaredReturnType();
       if (QualReturnType.isConstQualified()) {
-        Consumer.LogError(Method, "the return type of getter cannot be const");
+        Consumer->LogError(Method, "the return type of getter cannot be const");
       }
       if (!QualReturnType->isReferenceType()) {
-        Consumer.LogError(Method,
-                          "the return type of getter must be reference");
+        Consumer->LogError(Method,
+                           "the return type of getter must be reference");
       }
-      if (Consumer.HasError())
+      if (Consumer->HasError())
         return;
       EntryInfo Entry(Consumer, QualReturnType.getTypePtr(), Method);
       for (const auto &Category : SerializedAttr->categories()) {
-        Entry.AddCategory(Category);
+        Entry.addCategory(Category);
       }
-      Entries.push_back(std::move(Entry));
+      Entries.emplace(Entry.EntryName, std::move(Entry));
     }
   }
 
@@ -175,21 +87,41 @@ void RecordInfo::ParseFields() {
     if (auto *SerializedAttr = Field->getAttr<clang::MESerializedAttr>()) {
       const auto FieldType = Field->getType();
       if (FieldType.isConstQualified()) {
-        Consumer.LogError(Field, "serialized type cannot be const");
+        Consumer->LogError(Field, "serialized type cannot be const");
       }
       if (FieldType->isReferenceType()) {
-        Consumer.LogError(Field, "serialized type cannot be a reference type");
+        Consumer->LogError(Field, "serialized type cannot be a reference type");
       }
       if (FieldType->isPointerType()) {
-        Consumer.LogError(Field, "serialized type cannot be a pointer type");
+        Consumer->LogError(Field, "serialized type cannot be a pointer type");
       }
-      if (Consumer.HasError())
+      if (Consumer->HasError())
         return;
       EntryInfo Entry(Consumer, FieldType.getTypePtr(), Field);
       for (const auto &Category : SerializedAttr->categories()) {
-        Entry.AddCategory(Category);
+        Entry.addCategory(Category);
       }
-      Entries.push_back(std::move(Entry));
+      Entries.emplace(Entry.EntryName, std::move(Entry));
     }
   }
+}
+void RecordInfo::toObjFile(std::string &String) {
+  if (!Serializable || Pure)
+    return;
+  std::size_t Size = 0;
+  Size += me::s11n::SizeRaw(FullName);
+  Size += me::s11n::SizeRaw(Entries);
+  Size += me::s11n::SizeRaw(RecordID);
+  Size += me::s11n::SizeRaw(Polymorphic);
+  Size += me::s11n::SizeRaw(IsNew);
+  Size += me::s11n::SizeRaw(Size);
+
+  String.resize(Size);
+  uint8_t *ptr = reinterpret_cast<uint8_t *>(&String[0]);
+  ptr = me::s11n::WriteRaw(Size, ptr);
+  ptr = me::s11n::WriteField(1, FullName, ptr);
+  ptr = me::s11n::WriteField(2, Entries, ptr);
+  ptr = me::s11n::WriteField(3, RecordID, ptr);
+  ptr = me::s11n::WriteField(4, Polymorphic, ptr);
+  ptr = me::s11n::WriteField(5, IsNew, ptr);
 }

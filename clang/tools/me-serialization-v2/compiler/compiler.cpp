@@ -11,8 +11,16 @@ static llvm::cl::opt<std::string> out_dir("o",
                                           llvm::cl::value_desc("dir"),
                                           llvm::cl::init("."),
                                           llvm::cl::cat(serializable_category));
+static std::unordered_map<std::string, RecordDatabase> ChangedDatabase;
 
-
+class SerializableGenerationAction : public clang::ASTFrontendAction {
+public:
+  virtual std::unique_ptr<clang::ASTConsumer>
+  CreateASTConsumer(clang::CompilerInstance &Compiler, llvm::StringRef InFile) {
+    return std::unique_ptr<clang::ASTConsumer>(
+        new SerializableConsumer(Compiler, InFile, ChangedDatabase));
+  }
+};
 
 int main(int argc, const char **argv) {
   clang::tooling::CommonOptionsParser options_parser(argc, argv,
