@@ -168,7 +168,7 @@ bool RecordDatabase::parseIndex(size_t &Cursor, uint32_t &Index) {
       return false;
     }
     if (l > 0xFFFFFFFF) {
-      Diags.Report(Token.getLocation(), clang::diag::mes11n_err_index_max)
+      Diags.Report(Token.getLocation(), err_index_max)
           << std::to_string(l);
       return false;
     }
@@ -180,7 +180,7 @@ bool RecordDatabase::parseIdentifier(size_t &Cursor, std::string &Name,
                                      bool Append) {
   clang::Token Token = Tokens[Cursor++];
   if (!Token.isAnyIdentifier()) {
-    Diags.Report(Token.getLocation(), clang::diag::mes11n_err_expected_token)
+    Diags.Report(Token.getLocation(), err_expected_token)
         << "identifier";
     return false;
   }

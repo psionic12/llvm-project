@@ -14,37 +14,9 @@ constexpr Graininess GetGraininess(uint8_t tag) {
   return static_cast<Graininess>(tag &= 0b111);
 }
 constexpr bool HasRtti(uint8_t tag) { return tag >> 7; }
-// integral types
-template <typename T>
-std::enable_if_t<std::is_integral<T>::value, bool> NotEmpty(const T& value) {
-  return (value != 0);
-}
-// floating point types
-template <typename T>
-std::enable_if_t<std::is_floating_point<T>::value, bool>
-NotEmpty(const T& value) {
-  return (value < 0 || value > 0);
-}
-// vector type
-template <typename T, typename... TS>
-bool NotEmpty(const std::vector<T, TS...>& value) {
-  return !value.empty();
-}
-// array type
-template <typename T, std::size_t SIZE>
-constexpr bool NotEmpty(const T (&value)[SIZE]) {
-  return false;
-}
-// unique_ptr type
-template <typename T, typename... TS>
-bool NotEmpty(const std::unique_ptr<T, TS...>& unique_ptr) {
-  return unique_ptr != nullptr;
-}
-// std::string type
-inline bool NotEmpty(const std::string& s) { return !s.empty(); }
 template <typename T>
 uint8_t *WriteField(const uint32_t index, const T& value, uint8_t *ptr) {
-  if (NotEmpty(value)) {
+  if (NotEmptyRaw(value)) {
     ptr = Coder<uint32_t>::Write(index, ptr);
     constexpr uint8_t tag = MakeTag(false, GraininessWrapper<T>::type);
     ptr = Coder<uint8_t>::Write(tag, ptr);
@@ -77,7 +49,7 @@ uint8_t *WriteField(const int index, const std::unique_ptr<T, TS...>& value,
 
 template <std::uint32_t INDEX, typename T>
 constexpr std::size_t FieldSize(const T& value) {
-  if (NotEmpty(value)) {
+  if (NotEmptyRaw(value)) {
     return Coder<uint32_t>::ConstexprSize<INDEX>() // index size
            + 1                                     // tag size
            + SizeRaw(value);

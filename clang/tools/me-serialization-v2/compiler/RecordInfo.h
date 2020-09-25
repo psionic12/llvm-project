@@ -62,7 +62,7 @@ public:
   bool isNew() { return IsNew; }
   clang::StringRef fullName() { return FullName; }
   std::unordered_map<std::string, EntryInfo> &entries() { return Entries; }
-  void toObjFile(std::string &String);
+  std::string toObjFile();
 
 private:
   SerializableConsumer *Consumer;

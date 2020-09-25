@@ -16,20 +16,25 @@ namespace s11n {
 // helper to avoid static_assert trigger directly
 template <typename> struct DeferredFalse : std::false_type {};
 template <typename T, typename Enable = void> struct Coder {
-  static uint8_t *Write(const T &value, uint8_t *ptr) {
+  static void CompileError() {
     static_assert(DeferredFalse<T>::value,
                   "fall through default coder, unsupported type.");
+  }
+  static uint8_t *Write(const T &value, uint8_t *ptr) {
+    CompileError();
     return nullptr;
   }
   static const uint8_t *Read(T &out, const uint8_t *ptr) {
-    static_assert(DeferredFalse<T>::value,
-                  "fall through default coder, unsupported type.");
+    CompileError();
     return nullptr;
   }
   static std::size_t Size(const T &value) {
-    static_assert(DeferredFalse<T>::value,
-                  "fall through default coder, unsupported type.");
+    CompileError();
     return 0;
+  }
+  static inline bool NotEmpty(const T &value) {
+    CompileError();
+    return false;
   }
 };
 
@@ -39,6 +44,7 @@ struct CoderWrapper {
   virtual uint8_t *Write(const void *value, uint8_t *ptr) = 0;
   virtual const uint8_t *Read(void *out, const uint8_t *ptr) = 0;
   virtual void *New() = 0;
+  virtual bool NotEmpty(const void *value) = 0;
 };
 
 template <typename T> struct CoderWrapperImpl : public CoderWrapper {
@@ -51,6 +57,9 @@ template <typename T> struct CoderWrapperImpl : public CoderWrapper {
   void *New() override {
     // this means a serializable must has a default constructor
     return new T();
+  }
+  bool NotEmpty(const void *value) override {
+    return Coder<T>::NotEmpty(*reinterpret_cast<const T *>(value));
   }
 };
 
@@ -65,6 +74,9 @@ inline static const uint8_t *ReadRaw(T &out, const uint8_t *ptr) {
 template <typename T> inline static std::size_t SizeRaw(const T &value) {
   return Coder<T>::Size(value);
 }
+template <typename T> inline static std::size_t NotEmptyRaw(const T &value) {
+  return Coder<T>::NotEmpty(value);
+}
 template <typename T, std::size_t SIZE>
 inline static uint8_t *WriteRaw(const T (&value)[SIZE], uint8_t *ptr) {
   return Coder<T[SIZE]>::Write(value, ptr);
@@ -77,53 +89,59 @@ template <typename T, std::size_t SIZE>
 inline static constexpr std::size_t SizeRaw(const T (&value)[SIZE]) {
   return Coder<T[SIZE]>::Size(value);
 }
+template <typename T, std::size_t SIZE>
+inline static constexpr std::size_t NotEmptyRaw(const T (&value)[SIZE]) {
+  return true;
+}
 
 // pointers are not supported
 template <typename T> struct Coder<T *> {
-  static uint8_t *Write(const T &value, uint8_t *ptr) {
+  static void CompileError() {
     static_assert(
         DeferredFalse<T>::value,
         "pointer is not supported, serializable should owns something, not "
         "pointers something, use std::unique ptr instead.");
+  }
+  static uint8_t *Write(const T &value, uint8_t *ptr) {
+    CompileError();
     return nullptr;
   }
   static const uint8_t *Read(T &out, const uint8_t *ptr) {
-    static_assert(
-        DeferredFalse<T>::value,
-        "pointer is not supported, serializable should owns something, not "
-        "pointers something, use std::unique ptr instead.");
+    CompileError();
     return nullptr;
   }
   static std::size_t Size(const T &value) {
-    static_assert(
-        DeferredFalse<T>::value,
-        "pointer is not supported, serializable should owns something, not "
-        "pointers something, use std::unique ptr instead.");
+    CompileError();
     return 0;
+  }
+  static bool NotEmpty(const T &value) {
+    CompileError();
+    return false;
   }
 };
 // shared_ptrs are not supported
 template <typename T> struct Coder<std::shared_ptr<T>> {
-  static uint8_t *Write(const T &value, uint8_t *ptr) {
+  static void CompileError() {
     static_assert(
         DeferredFalse<T>::value,
         "shared_ptr is not supported, serializable should owns something, not "
         "shares something.");
+  }
+  static uint8_t *Write(const T &value, uint8_t *ptr) {
+    CompileError();
     return nullptr;
   }
   static const uint8_t *Read(T &out, const uint8_t *ptr) {
-    static_assert(
-        DeferredFalse<T>::value,
-        "shared_ptr is not supported, serializable should owns something, not "
-        "shares something.");
+    CompileError();
     return nullptr;
   }
   static std::size_t Size(const T &value) {
-    static_assert(
-        DeferredFalse<T>::value,
-        "shared_ptr is not supported, serializable should owns something, not "
-        "shares something.");
+    CompileError();
     return 0;
+  }
+  static bool NotEmpty(const T &value) {
+    CompileError();
+    return false;
   }
 };
 // varint coder, used for unsigned arithmetic type
@@ -182,6 +200,7 @@ struct Coder<T, typename std::enable_if_t<GraininessWrapper<T>::type ==
     // division to multiplication optimize
     return static_cast<std::size_t>((log2value * 9 + 73) / 64);
   }
+  static bool NotEmpty(const T &value) { return value != 0; }
   // We need passing constexpr parameter feature!!!
   template <std::size_t SIZE> static constexpr std::size_t ConstexprSize() {
     constexpr std::size_t log2value = Log2FloorHelper::Log2FloorConstexpr(SIZE);
@@ -217,6 +236,7 @@ struct Coder<T, typename std::enable_if_t<GraininessWrapper<T>::type ==
     UnsignedT zig_zag_value = ZigZagValue(value);
     return Coder<UnsignedT>::Size(zig_zag_value);
   }
+  static bool NotEmpty(const T &value) { return value != 0; }
   template <std::size_t SIZE> static constexpr std::size_t ConstexprSize() {
     constexpr UnsignedT zig_zag_value = ZigZagValue(SIZE);
     return Coder<UnsignedT>::template ConstexprSize<zig_zag_value>();
@@ -226,7 +246,7 @@ struct Coder<T, typename std::enable_if_t<GraininessWrapper<T>::type ==
 // enum type encoder
 template <typename T>
 struct Coder<T, typename std::enable_if_t<std::is_enum<T>::value>> {
-  static uint8_t *Write(T value, uint8_t *ptr) {
+  static uint8_t *Write(const T& value, uint8_t *ptr) {
     return Coder<unsigned>::Write(static_cast<unsigned>(value), ptr);
   }
   static const uint8_t *Read(T &out, const uint8_t *ptr) {
@@ -238,6 +258,7 @@ struct Coder<T, typename std::enable_if_t<std::is_enum<T>::value>> {
   static constexpr std::size_t Size(T value) {
     return Coder<unsigned>::Size(static_cast<unsigned>(value));
   }
+  static bool NotEmpty(const T &value) { return true; }
 };
 
 // fixed size encoder
@@ -253,12 +274,13 @@ template <typename T>
                                                            ptr);
   }
   static constexpr std::size_t Size(T value) { return sizeof(T); }
+  static bool NotEmpty(const T &value) { return value != 0; }
 };
 // unique_ptr Type for polymorphic type
-template <typename T, typename... Ts>
-struct Coder<std::unique_ptr<T, Ts...>,
+template <typename T, typename... TS>
+struct Coder<std::unique_ptr<T, TS...>,
              typename std::enable_if_t<std::is_polymorphic<T>::value>> {
-  static uint8_t *Write(const std::unique_ptr<T, Ts...> &unique_ptr,
+  static uint8_t *Write(const std::unique_ptr<T, TS...> &unique_ptr,
                         uint8_t *ptr) {
     // TODO do I need to check the existence?
     auto id = CoderWrapper::CppIdToIdMap[typeid(*unique_ptr)];
@@ -266,7 +288,7 @@ struct Coder<std::unique_ptr<T, Ts...>,
     ptr = CoderWrapper::IdToCoderMap[id]->Write(unique_ptr.get(), ptr);
     return ptr;
   }
-  static const uint8_t *Read(std::unique_ptr<T, Ts...> &unique_ptr,
+  static const uint8_t *Read(std::unique_ptr<T, TS...> &unique_ptr,
                              const uint8_t *ptr) {
     std::size_t id;
     ptr = ReadRaw(id, ptr);
@@ -275,36 +297,44 @@ struct Coder<std::unique_ptr<T, Ts...>,
     unique_ptr.reset(reinterpret_cast<T *>(out));
     return ptr;
   }
-  static std::size_t Size(const std::unique_ptr<T, Ts...> &unique_ptr) {
+  static std::size_t Size(const std::unique_ptr<T, TS...> &unique_ptr) {
     std::size_t id = CoderWrapper::CppIdToIdMap[typeid(id)];
     return SizeRaw(id) + SizeRaw(*unique_ptr);
   }
+  static bool NotEmpty(const std::unique_ptr<T, TS...> &unique_ptr) {
+    if (unique_ptr) {
+      auto id = CoderWrapper::CppIdToIdMap[typeid(*unique_ptr)];
+      return CoderWrapper::IdToCoderMap[id]->NotEmpty(*unique_ptr);
+    }
+    return false;
+  }
 };
-template <typename T, typename... Ts>
-struct Coder<std::unique_ptr<T, Ts...>,
+template <typename T, typename... TS>
+struct Coder<std::unique_ptr<T, TS...>,
              typename std::enable_if_t<!std::is_polymorphic<T>::value>> {
-  static uint8_t *Write(const std::unique_ptr<T, Ts...> &unique_ptr,
+  static void CompileError() {
+    static_assert(
+        DeferredFalse<T>::value,
+        "due to ownership principle, ptr of a non polymorphic type makes "
+        "little sense, please issue us if you has a reasonable case");
+  }
+  static uint8_t *Write(const std::unique_ptr<T, TS...> &unique_ptr,
                         uint8_t *ptr) {
-    static_assert(
-        DeferredFalse<T>::value,
-        "due to ownership principle, ptr of a non polymorphic type makes "
-        "little sense, please issue us if you has a reasonable case");
+    CompileError();
     return nullptr;
   }
-  static const uint8_t *Read(std::unique_ptr<T, Ts...> &unique_ptr,
+  static const uint8_t *Read(std::unique_ptr<T, TS...> &unique_ptr,
                              const uint8_t *ptr) {
-    static_assert(
-        DeferredFalse<T>::value,
-        "due to ownership principle, ptr of a non polymorphic type makes "
-        "little sense, please issue us if you has a reasonable case");
+    CompileError();
     return nullptr;
   }
-  static std::size_t Size(const std::unique_ptr<T, Ts...> &unique_ptr) {
-    static_assert(
-        DeferredFalse<T>::value,
-        "due to ownership principle, ptr of a non polymorphic type makes "
-        "little sense, please issue us if you has a reasonable case");
+  static std::size_t Size(const std::unique_ptr<T, TS...> &unique_ptr) {
+    CompileError();
     return 0;
+  }
+  static bool NotEmpty(const std::unique_ptr<T, TS...> &unique_ptr) {
+    CompileError();
+    return false;
   }
 };
 // encoder for arrays which element is varint
@@ -336,6 +366,7 @@ struct Coder<T[SIZE], typename std::enable_if_t<GraininessWrapper<T>::type ==
     }
     return total_size;
   }
+  static bool NotEmpty(const T (&value)[SIZE]) { return true; }
 };
 // encoder for arrays which element is fixed
 template <typename T, std::size_t SIZE>
@@ -357,10 +388,11 @@ template <typename T, std::size_t SIZE>
     return Coder<decltype(SIZE)>::template ConstexprSize<SIZE>() +
            (SIZE * Coder<T>::Size(value[0]));
   }
+  static bool NotEmpty(const T (&value)[SIZE]) { return true; }
 };
 // encoder for vectors which element is varint
-template <typename T, typename... Ts>
-struct Coder<std::vector<T, Ts...>,
+template <typename T, typename... TS>
+struct Coder<std::vector<T, TS...>,
              typename std::enable_if_t<GraininessWrapper<T>::type ==
                                        Graininess::VARINT>> {
   static uint8_t *Write(const std::vector<T> &v, uint8_t *ptr) {
@@ -388,10 +420,11 @@ struct Coder<std::vector<T, Ts...>,
     }
     return total_size;
   }
+  static bool NotEmpty(const std::vector<T> &v) { return !v.empty(); }
 };
 // encoder for vectors which element is fixed
-template <typename T, typename... Ts>
-    struct Coder < std::vector<T, Ts...>,
+template <typename T, typename... TS>
+    struct Coder < std::vector<T, TS...>,
     typename std::enable_if_t<GraininessWrapper<T>::type<Graininess::VARINT>> {
   static uint8_t *Write(const std::vector<T> &v, uint8_t *ptr) {
     ptr = Coder<decltype(v.size())>::Write(v.size(), ptr);
@@ -410,6 +443,7 @@ template <typename T, typename... Ts>
     return Coder<decltype(vector_size)>::Size(vector_size) +
            (vector_size * Coder<T>::Size(v));
   }
+  static bool NotEmpty(const std::vector<T> &v) { return !v.empty(); }
 };
 // coder for std::string
 template <> struct Coder<std::string> {
@@ -429,6 +463,7 @@ template <> struct Coder<std::string> {
     auto string_size = s.size();
     return Coder<decltype(string_size)>::Size(string_size) + s.size();
   }
+  static bool NotEmpty(const std::string &s) { return !s.empty(); }
 };
 
 // coder for std::pair
@@ -446,6 +481,9 @@ template <typename T1, typename T2> struct Coder<std::pair<T1, T2>> {
   static std::size_t Size(const std::pair<T1, T2> &value) {
     return Coder<T1>::Size(value.first) + Coder<T2>::Size(value.second);
   }
+  static bool NotEmpty(const std::pair<T1, T2> &value) {
+    return NotEmptyRaw(value.first) || NotEmptyRaw(value.second);
+  }
 };
 
 // coder for maps
@@ -457,23 +495,32 @@ struct Coder<
         is_specialization<MAP<KEY, VALUE, TS...>, std::unordered_map>::value ||
         is_specialization<MAP<KEY, VALUE, TS...>, std::map>::value>> {
   static uint8_t *Write(const MAP<KEY, VALUE, TS...> &value, uint8_t *ptr) {
-    for (const auto &Pair : value) {
-      ptr = Coder<decltype(Pair)>::Write(Pair, ptr);
+    ptr = WriteRaw(value.size(), ptr);
+    for (const std::pair<KEY, VALUE> &pair : value) {
+      ptr = Coder<std::pair<KEY, VALUE>>::Write(pair, ptr);
     }
     return ptr;
   }
   static const uint8_t *Read(MAP<KEY, VALUE, TS...> &out, const uint8_t *ptr) {
-    for (auto &Pair : out) {
-      ptr = Coder<decltype(Pair)>::Read(Pair, ptr);
+    std::size_t size;
+    ptr = ReadRaw(size, ptr);
+    std::pair<KEY, VALUE> pair;
+    for (std::size_t i = 0; i < size; i++) {
+      ptr = Coder<std::pair<KEY, VALUE>>::Read(pair, ptr);
+      out.emplace(pair);
     }
     return ptr;
   }
   static std::size_t Size(const MAP<KEY, VALUE, TS...> &value) {
     std::size_t size = 0;
-    for (const auto &Pair : value) {
-      size += Coder<decltype(Pair)>::Size(Pair);
+    size += SizeRaw(value.size());
+    for (const std::pair<KEY, VALUE> &pair : value) {
+      size += Coder<std::pair<KEY, VALUE>>::Size(pair);
     }
     return size;
+  }
+  static bool NotEmpty(const MAP<KEY, VALUE, TS...> &value) {
+    return !value.empty();
   }
 };
 

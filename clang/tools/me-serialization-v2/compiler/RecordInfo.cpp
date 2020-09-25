@@ -105,9 +105,8 @@ void RecordInfo::parseFields() {
     }
   }
 }
-void RecordInfo::toObjFile(std::string &String) {
-  if (!Serializable || Pure)
-    return;
+std::string RecordInfo::toObjFile() {
+  std::string String;
   std::size_t Size = 0;
   Size += me::s11n::SizeRaw(FullName);
   Size += me::s11n::SizeRaw(Entries);
@@ -117,11 +116,12 @@ void RecordInfo::toObjFile(std::string &String) {
   Size += me::s11n::SizeRaw(Size);
 
   String.resize(Size);
-  uint8_t *ptr = reinterpret_cast<uint8_t *>(&String[0]);
-  ptr = me::s11n::WriteRaw(Size, ptr);
-  ptr = me::s11n::WriteField(1, FullName, ptr);
-  ptr = me::s11n::WriteField(2, Entries, ptr);
-  ptr = me::s11n::WriteField(3, RecordID, ptr);
-  ptr = me::s11n::WriteField(4, Polymorphic, ptr);
-  ptr = me::s11n::WriteField(5, IsNew, ptr);
+  uint8_t *Ptr = reinterpret_cast<uint8_t *>(&String[0]);
+  Ptr = me::s11n::WriteRaw(Size, Ptr);
+  Ptr = me::s11n::WriteField(1, FullName, Ptr);
+  Ptr = me::s11n::WriteField(2, Entries, Ptr);
+  Ptr = me::s11n::WriteField(3, RecordID, Ptr);
+  Ptr = me::s11n::WriteField(4, Polymorphic, Ptr);
+  Ptr = me::s11n::WriteField(5, IsNew, Ptr);
+  return String;
 }

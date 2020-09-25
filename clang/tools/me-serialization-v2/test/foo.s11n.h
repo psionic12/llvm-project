@@ -8,6 +8,9 @@ namespace s11n {
 
 template <> struct Coder<Foo> {
   static uint8_t *Write(const Foo &value, uint8_t *ptr) {
+    std::size_t size = Size(value);
+    if (size == 0)
+      return ptr;
     ptr = WriteRaw(Size(value), ptr);
     ptr = WriteField(1, value.f1, ptr);
     ptr = WriteField(2, value.f2, ptr);
@@ -24,7 +27,7 @@ template <> struct Coder<Foo> {
     ptr = WriteField(13, value.f13, ptr);
     ptr = WriteField(14, value.f14, ptr);
     ptr = WriteField(15, value.f15, ptr);
-//    ptr = WriteField(16, value.f16, ptr);
+    //    ptr = WriteField(16, value.f16, ptr);
     return ptr;
   }
   static const uint8_t *Read(Foo &out, const uint8_t *ptr) {
@@ -87,9 +90,9 @@ template <> struct Coder<Foo> {
         //      case 15:
         //        ptr = ReadRaw(out.f15, ptr);
         //        break;
-//      case 16:
-//        ptr = ReadRaw(out.f16, ptr);
-//        break;
+        //      case 16:
+        //        ptr = ReadRaw(out.f16, ptr);
+        //        break;
       default: {
         ptr = SkipUnknown(tag, ptr);
       }
@@ -114,9 +117,19 @@ template <> struct Coder<Foo> {
     size += FieldSize<13>(value.f13);
     size += FieldSize<14>(value.f14);
     size += FieldSize<15>(value.f15);
-//    size += FieldSize<16>(value.f16);
+    //    size += FieldSize<16>(value.f16);
     size += SizeRaw(size);
     return size;
+  }
+  static std::size_t NotEmpty(const Foo &value) {
+    return NotEmptyRaw(value.f1) || NotEmptyRaw(value.f2) ||
+           NotEmptyRaw(value.f3) || NotEmptyRaw(value.f4) ||
+           NotEmptyRaw(value.f5) || NotEmptyRaw(value.f6) ||
+           NotEmptyRaw(value.f7) || NotEmptyRaw(value.f8) ||
+           NotEmptyRaw(value.f9) || NotEmptyRaw(value.f10) ||
+           NotEmptyRaw(value.f11) || NotEmptyRaw(value.f12) ||
+           NotEmptyRaw(value.f13) || NotEmptyRaw(value.f14) ||
+           NotEmptyRaw(value.f15);
   }
 };
 } // namespace s11n

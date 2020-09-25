@@ -2,7 +2,7 @@
 bool IndexManager::emplace(const std::string &Str, unsigned int Index) {
   const auto &Pair = StrToIndex.emplace(Str, Index);
   bool success = Pair.second;
-  clang::StringRef Name = Pair.first->first;
+  llvm::StringRef Name = Pair.first->first;
   OrderedMap.emplace(Index, Name);
   if (Index > Max)
     Max = Index;

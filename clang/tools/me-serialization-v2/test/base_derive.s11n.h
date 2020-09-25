@@ -41,6 +41,9 @@ template <> struct Coder<Base> {
     size += SizeRaw(size);
     return size;
   }
+ static std::size_t NotEmpty(const Base& value) {
+   return true;
+ }
 };
 template <> struct Coder<DerivedOne> {
   static uint8_t *Write(const DerivedOne& value, uint8_t *ptr) {
@@ -78,6 +81,9 @@ template <> struct Coder<DerivedOne> {
     size += SizeRaw(size);
     return size;
   }
+  static std::size_t NotEmpty(const DerivedOne& value) {
+    return true;
+  }
 };
 template <> struct Coder<DerivedTwo> {
   static uint8_t *Write(const DerivedTwo& value, uint8_t *ptr) {
@@ -114,6 +120,9 @@ template <> struct Coder<DerivedTwo> {
     size += FieldSize<1>(value.msg);
     size += SizeRaw(size);
     return size;
+  }
+  static std::size_t NotEmpty(const DerivedTwo& value) {
+    return true;
   }
 };
 } // namespace serialization

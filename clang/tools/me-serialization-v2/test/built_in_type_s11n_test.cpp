@@ -5,7 +5,7 @@ class BuiltInTypeSerializeTest : public testing::Test {};
 static uint8_t buffer[256];
 TEST_F(BuiltInTypeSerializeTest, int_test) {
   uint8_t *ptr = buffer;
-  int i = -42;
+  int i = 0;
   ptr = me::s11n::WriteRaw(i, ptr);
   float f = 3.14f;
   ptr = me::s11n::WriteRaw(f, ptr);
@@ -121,4 +121,29 @@ TEST_F(BuiltInTypeSerializeTest, size_test) {
   float farray[] = {1.0, 0.2, 3.14, 1000};
   ptr = me::s11n::WriteRaw(farray, buffer);
   ASSERT_EQ(ptr - buffer, me::s11n::SizeRaw(farray));
+
+  std::unordered_map<std::string, int> unordered_map{{"One", 1}, {"Two", 2}};
+  ptr = me::s11n::WriteRaw(unordered_map, buffer);
+  ASSERT_EQ(ptr - buffer, me::s11n::SizeRaw(unordered_map));
+}
+
+TEST_F(BuiltInTypeSerializeTest, zero_test) {
+  std::unique_ptr<uint8_t> buffer(new uint8_t[64]);
+  int input_i = 0;
+  int output_i = 1;
+  me::s11n::WriteRaw(input_i, buffer.get());
+  me::s11n::ReadRaw(output_i, buffer.get());
+  ASSERT_EQ(output_i, input_i);
+
+  unsigned input_ui = 0;
+  unsigned output_ui = 1;
+  me::s11n::WriteRaw(input_ui, buffer.get());
+  me::s11n::ReadRaw(output_ui, buffer.get());
+  ASSERT_EQ(output_ui, input_ui);
+
+  float input_f = 0;
+  unsigned output_f = 1.0f;
+  me::s11n::WriteRaw(input_f, buffer.get());
+  me::s11n::ReadRaw(output_f, buffer.get());
+  ASSERT_EQ(input_f, output_f);
 }
