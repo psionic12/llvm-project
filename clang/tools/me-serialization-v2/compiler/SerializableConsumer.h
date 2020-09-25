@@ -21,7 +21,8 @@ class SerializableConsumer : public clang::ASTConsumer {
 public:
   SerializableConsumer(
       clang::CompilerInstance &Compiler, llvm::StringRef InFile,
-      std::unordered_map<std::string, RecordDatabase> &ChangedDatabase);
+      std::unordered_map<std::string, RecordDatabase> &ChangedDatabase,
+      llvm::StringRef OutDir);
   void LogWarning(const clang::Decl *Decl, const char *Format, ...);
 
   void LogError(const clang::Decl *Decl, const char *format, ...);
@@ -53,5 +54,6 @@ private:
   std::string ObjFile;
   clang::DiagnosticsEngine &Diags;
   std::unordered_map<std::string, RecordDatabase> &ChangedDatabase;
+  clang::StringRef OutDir;
 };
 #endif // LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_SERIALIZABLE_GENERATOR_H_

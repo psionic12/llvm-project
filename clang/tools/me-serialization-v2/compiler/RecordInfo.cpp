@@ -105,7 +105,7 @@ void RecordInfo::parseFields() {
     }
   }
 }
-std::string RecordInfo::toObjFile() {
+std::string RecordInfo::toObj() const {
   std::string String;
   std::size_t Size = 0;
   Size += me::s11n::SizeRaw(FullName);
@@ -124,4 +124,36 @@ std::string RecordInfo::toObjFile() {
   Ptr = me::s11n::WriteField(4, Polymorphic, Ptr);
   Ptr = me::s11n::WriteField(5, IsNew, Ptr);
   return String;
+}
+RecordInfo::RecordInfo(const uint8_t *Ptr) {
+  std::size_t Size;
+  const uint8_t * Begin = Ptr;
+  Ptr = me::s11n::ReadRaw(Size, Ptr);
+  const uint8_t * End = Begin + Size;
+  while (Ptr < End) {
+    uint32_t Index;
+    Ptr = me::s11n::ReadRaw(Index, Ptr);
+    uint8_t tag;
+    Ptr = me::s11n::ReadRaw(tag, Ptr);
+    switch (Index) {
+    case 1:
+      Ptr = me::s11n::ReadRaw(FullName, Ptr);
+      break;
+    case 2:
+      Ptr = me::s11n::ReadRaw(Entries, Ptr);
+      break;
+    case 3:
+      Ptr = me::s11n::ReadRaw(RecordID, Ptr);
+      break;
+    case 4:
+      Ptr = me::s11n::ReadRaw(Polymorphic, Ptr);
+      break;
+    case 5:
+      Ptr = me::s11n::ReadRaw(IsNew, Ptr);
+      break;
+    default: {
+      Ptr = me::s11n::SkipUnknown(tag, Ptr);
+    }
+    }
+  }
 }

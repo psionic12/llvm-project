@@ -50,6 +50,7 @@ private:
 
 class RecordInfo {
 public:
+  RecordInfo(const uint8_t* Ptr);
   RecordInfo(SerializableConsumer *Consumer,
              const clang::CXXRecordDecl *RecordDecl);
   void parseFields();
@@ -62,7 +63,7 @@ public:
   bool isNew() { return IsNew; }
   clang::StringRef fullName() { return FullName; }
   std::unordered_map<std::string, EntryInfo> &entries() { return Entries; }
-  std::string toObjFile();
+  std::string toObj() const;
 
 private:
   SerializableConsumer *Consumer;

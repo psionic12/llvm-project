@@ -32,8 +32,9 @@ template <> struct Coder<Foo> {
   }
   static const uint8_t *Read(Foo &out, const uint8_t *ptr) {
     std::size_t total_size;
+    const uint8_t * begin = ptr;
     ptr = ReadRaw(total_size, ptr);
-    const uint8_t *ptr_end = ptr + total_size;
+    const uint8_t *ptr_end = begin + total_size;
     while (ptr < ptr_end) {
       uint32_t index;
       ptr = ReadRaw(index, ptr);
@@ -41,7 +42,7 @@ template <> struct Coder<Foo> {
       ptr = ReadRaw(tag, ptr);
       switch (index) {
       case 0:
-        // TODO should not have 0 index
+
         break;
       case 1:
         // TODO unlikely tag check

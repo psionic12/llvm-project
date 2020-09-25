@@ -16,12 +16,10 @@ constexpr Graininess GetGraininess(uint8_t tag) {
 constexpr bool HasRtti(uint8_t tag) { return tag >> 7; }
 template <typename T>
 uint8_t *WriteField(const uint32_t index, const T& value, uint8_t *ptr) {
-  if (NotEmptyRaw(value)) {
     ptr = Coder<uint32_t>::Write(index, ptr);
     constexpr uint8_t tag = MakeTag(false, GraininessWrapper<T>::type);
     ptr = Coder<uint8_t>::Write(tag, ptr);
     ptr = WriteRaw(value, ptr);
-  }
   return ptr;
 }
 // array type
@@ -49,12 +47,9 @@ uint8_t *WriteField(const int index, const std::unique_ptr<T, TS...>& value,
 
 template <std::uint32_t INDEX, typename T>
 constexpr std::size_t FieldSize(const T& value) {
-  if (NotEmptyRaw(value)) {
     return Coder<uint32_t>::ConstexprSize<INDEX>() // index size
            + 1                                     // tag size
            + SizeRaw(value);
-  } else
-    return 0;
 }
 template <std::uint32_t INDEX, typename T, std::size_t SIZE>
 constexpr std::size_t FieldSize(const T (&value)[SIZE]) {

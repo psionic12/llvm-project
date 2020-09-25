@@ -52,12 +52,22 @@ void SerializableConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   // parse database
   auto &Database = ChangedDatabase.emplace(InFile, Diags).first->second;
   Database.parse(DatabaseFile, RecordInfoMap);
+
+  // serialize RecordInfos
+  std::fstream Obj(ObjFile, std::ios::out | std::ios::trunc);
+  for (const auto &Pair : RecordInfoMap) {
+    const RecordInfo &RecordInfo = Pair.second;
+    Obj << RecordInfo.toObj();
+  }
+  Obj.close();
 }
 SerializableConsumer::SerializableConsumer(
     clang::CompilerInstance &Compiler, llvm::StringRef InFile,
-    std::unordered_map<std::string, RecordDatabase> &ChangedDatabase)
+    std::unordered_map<std::string, RecordDatabase> &ChangedDatabase,
+    llvm::StringRef OutDir)
     : Visitor(*this), Context(&Compiler.getASTContext()), InFile(InFile),
-      Diags(Compiler.getDiagnostics()), ChangedDatabase(ChangedDatabase) {
+      Diags(Compiler.getDiagnostics()), ChangedDatabase(ChangedDatabase),
+      OutDir(OutDir) {
 
   // check if input file is header
   llvm::StringRef PathExt = llvm::sys::path::extension(InFile);
@@ -74,7 +84,13 @@ SerializableConsumer::SerializableConsumer(
   // get correspond mes11n.obj
   Buffer.assign(InFile);
   llvm::sys::path::replace_extension(Buffer, "mes11n.obj");
-  ObjFile = Buffer.str().str();
+  // replace '/' or '\' in a the path to '_' for the object file
+  for (char &C : Buffer) {
+    if (C == '/' || C == '\\') {
+      C = '_';
+    }
+  }
+  ObjFile = OutDir.str() + '/' + Buffer.str().str();
 }
 bool SerializableConsumer::shouldParse() {
   // is head and database of of date?
