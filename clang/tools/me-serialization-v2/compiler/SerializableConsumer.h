@@ -35,7 +35,7 @@ public:
     // God damn I want to use try_emplace.
     const auto &Result = Cache.find(Decl);
     if (Result == Cache.end()) {
-      return Cache.emplace(Decl, RecordInfo(*this, Decl)).first->second;
+      return Cache.emplace(Decl, RecordInfo(this, Decl, InFile)).first->second;
     } else {
       return Result->second;
     }

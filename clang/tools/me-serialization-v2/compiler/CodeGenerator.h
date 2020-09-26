@@ -23,9 +23,11 @@ class CoreCppGenerator {
 public:
   CoreCppGenerator();
   ~CoreCppGenerator();
-  void registerClassID(llvm::StringRef Name, std::size_t ID);
+  bool registerClass(RecordInfo &RecordInfo);
 private:
   void recordGen(std::fstream &Out);
   std::vector<llvm::StringRef> Includes;
+  std::map<uint32_t, llvm::StringRef> IDMap;
+  uint32_t CurrentMax;
 };
 #endif // LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_COMPILER_CODEGENERATOR_H_

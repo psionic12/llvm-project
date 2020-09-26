@@ -122,16 +122,6 @@ template <> struct Coder<Foo> {
     size += SizeRaw(size);
     return size;
   }
-  static std::size_t NotEmpty(const Foo &value) {
-    return NotEmptyRaw(value.f1) || NotEmptyRaw(value.f2) ||
-           NotEmptyRaw(value.f3) || NotEmptyRaw(value.f4) ||
-           NotEmptyRaw(value.f5) || NotEmptyRaw(value.f6) ||
-           NotEmptyRaw(value.f7) || NotEmptyRaw(value.f8) ||
-           NotEmptyRaw(value.f9) || NotEmptyRaw(value.f10) ||
-           NotEmptyRaw(value.f11) || NotEmptyRaw(value.f12) ||
-           NotEmptyRaw(value.f13) || NotEmptyRaw(value.f14) ||
-           NotEmptyRaw(value.f15);
-  }
 };
 } // namespace s11n
 } // namespace me

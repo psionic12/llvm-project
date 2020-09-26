@@ -3,6 +3,7 @@
 #include "llvm/Support/CommandLine.h"
 #include <fstream>
 
+#include "CodeGenerator.h"
 #include "SerializableConsumer.h"
 static llvm::cl::OptionCategory serializable_category("serialization options");
 static llvm::cl::extrahelp
@@ -24,22 +25,14 @@ public:
   }
 };
 
-int main(int argc, const char **argv) {
-  clang::tooling::CommonOptionsParser options_parser(argc, argv,
-                                                     serializable_category);
-  clang::tooling::ClangTool tool(options_parser.getCompilations(),
-                                 options_parser.getSourcePathList());
-  tool.run(
-      clang::tooling::newFrontendActionFactory<SerializableGenerationAction>()
-          .get());
-
+std::vector<RecordInfo> getObjFiles() {
   // handle all mes11n.obj files
   std::vector<RecordInfo> RecordInfos;
   std::error_code EC;
   llvm::sys::fs::directory_iterator Begin(OutDir, EC, false);
   llvm::sys::fs::directory_iterator End;
   while (Begin != End) {
-    auto &Item = *Begin;
+    const auto &Item = *Begin;
     if (Item.type() == llvm::sys::fs::file_type::regular_file &&
         llvm::sys::path::extension(Item.path()) == "mes11n.obj") {
       auto FileSize = Item.status()->getSize();
@@ -53,4 +46,24 @@ int main(int argc, const char **argv) {
       }
     }
   }
+  return RecordInfos;
+}
+
+CoreCppGenerator CreateCore() {
+  auto RecordInfos = getObjFiles();
+  CoreCppGenerator Core;
+  for (auto &RecordInfo : RecordInfos) {
+    Core.registerClass(RecordInfo);
+  }
+  return Core;
+}
+
+int main(int argc, const char **argv) {
+  clang::tooling::CommonOptionsParser options_parser(argc, argv,
+                                                     serializable_category);
+  clang::tooling::ClangTool tool(options_parser.getCompilations(),
+                                 options_parser.getSourcePathList());
+  tool.run(
+      clang::tooling::newFrontendActionFactory<SerializableGenerationAction>()
+          .get());
 }

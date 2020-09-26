@@ -32,10 +32,6 @@ template <typename T, typename Enable = void> struct Coder {
     CompileError();
     return 0;
   }
-  static inline bool NotEmpty(const T &value) {
-    CompileError();
-    return false;
-  }
 };
 
 struct CoderWrapper {
@@ -44,7 +40,6 @@ struct CoderWrapper {
   virtual uint8_t *Write(const void *value, uint8_t *ptr) = 0;
   virtual const uint8_t *Read(void *out, const uint8_t *ptr) = 0;
   virtual void *New() = 0;
-  virtual bool NotEmpty(const void *value) = 0;
 };
 
 template <typename T> struct CoderWrapperImpl : public CoderWrapper {
@@ -57,9 +52,6 @@ template <typename T> struct CoderWrapperImpl : public CoderWrapper {
   void *New() override {
     // this means a serializable must has a default constructor
     return new T();
-  }
-  bool NotEmpty(const void *value) override {
-    return Coder<T>::NotEmpty(*reinterpret_cast<const T *>(value));
   }
 };
 
@@ -74,9 +66,6 @@ inline static const uint8_t *ReadRaw(T &out, const uint8_t *ptr) {
 template <typename T> inline static std::size_t SizeRaw(const T &value) {
   return Coder<T>::Size(value);
 }
-template <typename T> inline static std::size_t NotEmptyRaw(const T &value) {
-  return Coder<T>::NotEmpty(value);
-}
 template <typename T, std::size_t SIZE>
 inline static uint8_t *WriteRaw(const T (&value)[SIZE], uint8_t *ptr) {
   return Coder<T[SIZE]>::Write(value, ptr);
@@ -88,10 +77,6 @@ inline static const uint8_t *ReadRaw(T (&out)[SIZE], const uint8_t *ptr) {
 template <typename T, std::size_t SIZE>
 inline static constexpr std::size_t SizeRaw(const T (&value)[SIZE]) {
   return Coder<T[SIZE]>::Size(value);
-}
-template <typename T, std::size_t SIZE>
-inline static constexpr std::size_t NotEmptyRaw(const T (&value)[SIZE]) {
-  return true;
 }
 
 // pointers are not supported
@@ -114,10 +99,6 @@ template <typename T> struct Coder<T *> {
     CompileError();
     return 0;
   }
-  static bool NotEmpty(const T &value) {
-    CompileError();
-    return false;
-  }
 };
 // shared_ptrs are not supported
 template <typename T> struct Coder<std::shared_ptr<T>> {
@@ -138,10 +119,6 @@ template <typename T> struct Coder<std::shared_ptr<T>> {
   static std::size_t Size(const T &value) {
     CompileError();
     return 0;
-  }
-  static bool NotEmpty(const T &value) {
-    CompileError();
-    return false;
   }
 };
 // varint coder, used for unsigned arithmetic type
@@ -200,7 +177,6 @@ struct Coder<T, typename std::enable_if_t<GraininessWrapper<T>::type ==
     // division to multiplication optimize
     return static_cast<std::size_t>((log2value * 9 + 73) / 64);
   }
-  static bool NotEmpty(const T &value) { return value != 0; }
   // We need passing constexpr parameter feature!!!
   template <std::size_t SIZE> static constexpr std::size_t ConstexprSize() {
     constexpr std::size_t log2value = Log2FloorHelper::Log2FloorConstexpr(SIZE);
@@ -236,7 +212,6 @@ struct Coder<T, typename std::enable_if_t<GraininessWrapper<T>::type ==
     UnsignedT zig_zag_value = ZigZagValue(value);
     return Coder<UnsignedT>::Size(zig_zag_value);
   }
-  static bool NotEmpty(const T &value) { return value != 0; }
   template <std::size_t SIZE> static constexpr std::size_t ConstexprSize() {
     constexpr UnsignedT zig_zag_value = ZigZagValue(SIZE);
     return Coder<UnsignedT>::template ConstexprSize<zig_zag_value>();
@@ -258,7 +233,6 @@ struct Coder<T, typename std::enable_if_t<std::is_enum<T>::value>> {
   static constexpr std::size_t Size(T value) {
     return Coder<unsigned>::Size(static_cast<unsigned>(value));
   }
-  static bool NotEmpty(const T &value) { return true; }
 };
 
 // fixed size encoder
@@ -274,7 +248,6 @@ template <typename T>
                                                            ptr);
   }
   static constexpr std::size_t Size(T value) { return sizeof(T); }
-  static bool NotEmpty(const T &value) { return value != 0; }
 };
 // unique_ptr Type for polymorphic type
 template <typename T, typename... TS>
@@ -301,13 +274,6 @@ struct Coder<std::unique_ptr<T, TS...>,
     std::size_t id = CoderWrapper::CppIdToIdMap[typeid(id)];
     return SizeRaw(id) + SizeRaw(*unique_ptr);
   }
-  static bool NotEmpty(const std::unique_ptr<T, TS...> &unique_ptr) {
-    if (unique_ptr) {
-      auto id = CoderWrapper::CppIdToIdMap[typeid(*unique_ptr)];
-      return CoderWrapper::IdToCoderMap[id]->NotEmpty(*unique_ptr);
-    }
-    return false;
-  }
 };
 template <typename T, typename... TS>
 struct Coder<std::unique_ptr<T, TS...>,
@@ -331,10 +297,6 @@ struct Coder<std::unique_ptr<T, TS...>,
   static std::size_t Size(const std::unique_ptr<T, TS...> &unique_ptr) {
     CompileError();
     return 0;
-  }
-  static bool NotEmpty(const std::unique_ptr<T, TS...> &unique_ptr) {
-    CompileError();
-    return false;
   }
 };
 // encoder for arrays which element is varint
@@ -366,7 +328,6 @@ struct Coder<T[SIZE], typename std::enable_if_t<GraininessWrapper<T>::type ==
     }
     return total_size;
   }
-  static bool NotEmpty(const T (&value)[SIZE]) { return true; }
 };
 // encoder for arrays which element is fixed
 template <typename T, std::size_t SIZE>
@@ -388,7 +349,6 @@ template <typename T, std::size_t SIZE>
     return Coder<decltype(SIZE)>::template ConstexprSize<SIZE>() +
            (SIZE * Coder<T>::Size(value[0]));
   }
-  static bool NotEmpty(const T (&value)[SIZE]) { return true; }
 };
 // encoder for vectors which element is varint
 template <typename T, typename... TS>
@@ -420,7 +380,6 @@ struct Coder<std::vector<T, TS...>,
     }
     return total_size;
   }
-  static bool NotEmpty(const std::vector<T> &v) { return !v.empty(); }
 };
 // encoder for vectors which element is fixed
 template <typename T, typename... TS>
@@ -443,7 +402,6 @@ template <typename T, typename... TS>
     return Coder<decltype(vector_size)>::Size(vector_size) +
            (vector_size * Coder<T>::Size(v));
   }
-  static bool NotEmpty(const std::vector<T> &v) { return !v.empty(); }
 };
 // coder for std::string
 template <> struct Coder<std::string> {
@@ -463,7 +421,6 @@ template <> struct Coder<std::string> {
     auto string_size = s.size();
     return Coder<decltype(string_size)>::Size(string_size) + s.size();
   }
-  static bool NotEmpty(const std::string &s) { return !s.empty(); }
 };
 
 // coder for std::pair
@@ -480,9 +437,6 @@ template <typename T1, typename T2> struct Coder<std::pair<T1, T2>> {
   }
   static std::size_t Size(const std::pair<T1, T2> &value) {
     return Coder<T1>::Size(value.first) + Coder<T2>::Size(value.second);
-  }
-  static bool NotEmpty(const std::pair<T1, T2> &value) {
-    return NotEmptyRaw(value.first) || NotEmptyRaw(value.second);
   }
 };
 
@@ -518,9 +472,6 @@ struct Coder<
       size += Coder<std::pair<KEY, VALUE>>::Size(pair);
     }
     return size;
-  }
-  static bool NotEmpty(const MAP<KEY, VALUE, TS...> &value) {
-    return !value.empty();
   }
 };
 

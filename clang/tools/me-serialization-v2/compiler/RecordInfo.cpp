@@ -10,10 +10,11 @@ class ParseErrorException {};
 EntryInfo::EntryInfo(SerializableConsumer *Consumer, const clang::Type *Type,
                      const clang::NamedDecl *NamedDecl)
     : Consumer(Consumer), EntryName(NamedDecl->getName()) {}
-void EntryInfo::toObjFile(std::stringstream &SS) {}
+void EntryInfo::toObjFile(std::stringstream &SS) const {}
 RecordInfo::RecordInfo(SerializableConsumer *Consumer,
-                       const clang::CXXRecordDecl *RecordDecl)
-    : Consumer(Consumer), RecordDecl(RecordDecl) {
+                       const clang::CXXRecordDecl *RecordDecl,
+                       clang::StringRef IncludeFile)
+    : Consumer(Consumer), RecordDecl(RecordDecl), IncludeFile(IncludeFile) {
   FullName = RecordDecl->getQualifiedNameAsString();
 
   // parse all base classes
@@ -108,34 +109,40 @@ void RecordInfo::parseFields() {
 std::string RecordInfo::toObj() const {
   std::string String;
   std::size_t Size = 0;
+  Size += me::s11n::SizeRaw(HasID);
   Size += me::s11n::SizeRaw(FullName);
   Size += me::s11n::SizeRaw(Entries);
   Size += me::s11n::SizeRaw(RecordID);
   Size += me::s11n::SizeRaw(Polymorphic);
   Size += me::s11n::SizeRaw(IsNew);
+  Size += me::s11n::SizeRaw(IncludeFile);
   Size += me::s11n::SizeRaw(Size);
 
   String.resize(Size);
   uint8_t *Ptr = reinterpret_cast<uint8_t *>(&String[0]);
   Ptr = me::s11n::WriteRaw(Size, Ptr);
+  Ptr = me::s11n::WriteField(0, HasID, Ptr);
   Ptr = me::s11n::WriteField(1, FullName, Ptr);
   Ptr = me::s11n::WriteField(2, Entries, Ptr);
   Ptr = me::s11n::WriteField(3, RecordID, Ptr);
   Ptr = me::s11n::WriteField(4, Polymorphic, Ptr);
   Ptr = me::s11n::WriteField(5, IsNew, Ptr);
+  Ptr = me::s11n::WriteField(6, IncludeFile, Ptr);
   return String;
 }
 RecordInfo::RecordInfo(const uint8_t *Ptr) {
   std::size_t Size;
-  const uint8_t * Begin = Ptr;
+  const uint8_t *Begin = Ptr;
   Ptr = me::s11n::ReadRaw(Size, Ptr);
-  const uint8_t * End = Begin + Size;
+  const uint8_t *End = Begin + Size;
   while (Ptr < End) {
     uint32_t Index;
     Ptr = me::s11n::ReadRaw(Index, Ptr);
     uint8_t tag;
     Ptr = me::s11n::ReadRaw(tag, Ptr);
     switch (Index) {
+    case 0:
+      Ptr = me::s11n::ReadRaw(HasID, Ptr);
     case 1:
       Ptr = me::s11n::ReadRaw(FullName, Ptr);
       break;
@@ -150,6 +157,9 @@ RecordInfo::RecordInfo(const uint8_t *Ptr) {
       break;
     case 5:
       Ptr = me::s11n::ReadRaw(IsNew, Ptr);
+      break;
+    case 6:
+      Ptr = me::s11n::ReadRaw(IncludeFile, Ptr);
       break;
     default: {
       Ptr = me::s11n::SkipUnknown(tag, Ptr);

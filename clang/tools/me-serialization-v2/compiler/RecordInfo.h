@@ -33,11 +33,11 @@ public:
     Categories.emplace_back(category);
   }
   void setID(uint32_t ID) { this->RecordID = ID; }
-  clang::StringRef entryName() { return EntryName; }
+  clang::StringRef entryName() const { return EntryName; }
   // called when this record appears in database.
   void setNotNew() { IsNew = false; }
-  bool isNew() { return IsNew; }
-  void toObjFile(std::stringstream &SS);
+  bool isNew() const { return IsNew; }
+  void toObjFile(std::stringstream &SS) const;
 
 private:
   friend class RecordInfo;
@@ -50,25 +50,39 @@ private:
 
 class RecordInfo {
 public:
-  RecordInfo(const uint8_t* Ptr);
+  RecordInfo(const uint8_t *Ptr);
   RecordInfo(SerializableConsumer *Consumer,
-             const clang::CXXRecordDecl *RecordDecl);
+             const clang::CXXRecordDecl *RecordDecl,
+             clang::StringRef IncludeFile);
   void parseFields();
   bool isSerializable() const { return Serializable; }
-  bool pure() { return Pure; }
-  void setID(uint32_t ID) { RecordID = ID; }
-  bool isPolymorphic() { return Polymorphic; }
+  bool pure() const { return Pure; }
+  bool hasID() const { return HasID; }
+  void setID(uint32_t ID) {
+    RecordID = ID;
+    HasID = true;
+  }
+  uint32_t getID() const { return RecordID; }
+  bool isPolymorphic() const { return Polymorphic; }
   // called when this record appears in database.
   void setNotNew() { IsNew = false; }
-  bool isNew() { return IsNew; }
-  clang::StringRef fullName() { return FullName; }
+  bool isNew() const { return IsNew; }
+  clang::StringRef fullName() const { return FullName; }
   std::unordered_map<std::string, EntryInfo> &entries() { return Entries; }
+  const std::unordered_map<std::string, EntryInfo> &entries() const {
+    return Entries;
+  }
+  clang::StringRef includeFile() const {
+    return IncludeFile;
+  }
   std::string toObj() const;
 
 private:
   SerializableConsumer *Consumer;
   bool Serializable = false;
   bool Pure = false;
+  // 0
+  bool HasID = false;
   // 1
   std::string FullName;
   // 2
@@ -80,5 +94,7 @@ private:
   bool Polymorphic = false;
   // 5
   bool IsNew = true;
+  // 6
+  std::string IncludeFile;
 };
 #endif // LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_RECORD_INFO_H_
