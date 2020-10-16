@@ -3,8 +3,8 @@
 #include "llvm/Support/CommandLine.h"
 #include <fstream>
 
-#include "CodeGenerator.h"
-#include "SerializableConsumer.h"
+#include "common/CodeGenerator.h"
+#include "compiler/SerializableConsumer.h"
 static llvm::cl::OptionCategory serializable_category("serialization options");
 static llvm::cl::extrahelp
     CommonHelper(clang::tooling::CommonOptionsParser::HelpMessage);
@@ -25,29 +25,7 @@ public:
   }
 };
 
-std::vector<RecordInfo> getObjFiles() {
-  // handle all mes11n.obj files
-  std::vector<RecordInfo> RecordInfos;
-  std::error_code EC;
-  llvm::sys::fs::directory_iterator Begin(OutDir, EC, false);
-  llvm::sys::fs::directory_iterator End;
-  while (Begin != End) {
-    const auto &Item = *Begin;
-    if (Item.type() == llvm::sys::fs::file_type::regular_file &&
-        llvm::sys::path::extension(Item.path()) == "mes11n.obj") {
-      auto FileSize = Item.status()->getSize();
-      std::unique_ptr<const uint8_t> Buffer(new uint8_t[FileSize]);
-      std::fstream Obj(Item.path().c_str(), std::ios::in);
-      Obj.read((char *)Buffer.get(), FileSize);
-      const uint8_t *End = Buffer.get() + FileSize;
-      const uint8_t *Ptr = Buffer.get();
-      while (Ptr < End) {
-        RecordInfos.emplace_back(Ptr);
-      }
-    }
-  }
-  return RecordInfos;
-}
+
 
 CoreCppGenerator CreateCore() {
   auto RecordInfos = getObjFiles();

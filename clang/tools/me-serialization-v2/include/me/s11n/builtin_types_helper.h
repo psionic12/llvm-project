@@ -1,16 +1,11 @@
-#ifndef LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_SERIALIZATION_BUILT_IN_TYPES_HELPER_H_
-#define LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_SERIALIZATION_BUILT_IN_TYPES_HELPER_H_
+#ifndef S11N_INCLUDE_ME_S11N_BUILTIN_TYPES_HELPER_H
+#define S11N_INCLUDE_ME_S11N_BUILTIN_TYPES_HELPER_H
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <type_traits>
 #include <vector>
 namespace me {
-template <typename Test, template <typename...> class Ref>
-struct is_specialization : std::false_type {};
-
-template <template <typename...> class Ref, typename... Args>
-struct is_specialization<Ref<Args...>, Ref> : std::true_type {};
 namespace s11n {
 #define STRONG_TYPEDEF(_base, _type)                                           \
   class _type {                                                                \
@@ -107,4 +102,4 @@ struct GraininessWrapper<T*> {
 };
 } // namespace serialization
 } // namespace me
-#endif // LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_SERIALIZATION_BUILT_IN_TYPES_HELPER_H_
+#endif // S11N_INCLUDE_ME_S11N_BUILTIN_TYPES_HELPER_H

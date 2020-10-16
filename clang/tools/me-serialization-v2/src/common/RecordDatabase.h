@@ -1,6 +1,5 @@
 #ifndef LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_COMPILER_RECORDDATABASE_H_
 #define LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_COMPILER_RECORDDATABASE_H_
-#include "IndexManager.h"
 #include "RecordInfo.h"
 #include <clang/Basic/FileManager.h>
 #include <clang/Basic/FileSystemOptions.h>

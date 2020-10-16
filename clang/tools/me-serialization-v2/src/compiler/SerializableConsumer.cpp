@@ -1,5 +1,8 @@
 #include "SerializableConsumer.h"
-#include "CodeGuard.h"
+#include "ObjectEncoder.h"
+#include "common/CodeGuard.h"
+#include "common/PathHelper.h"
+#include "common/PostfixNames.h"
 #include <clang/Basic/FileManager.h>
 #include <cstdarg>
 #include <fstream>
@@ -16,10 +19,10 @@ void SerializableConsumer::LogWarning(const clang::Decl *Decl,
                                       const char *Format, ...) {
   const auto &source_manager = Decl->getASTContext().getSourceManager();
   Decl->getLocation().dump(source_manager);
-  va_list Argptr;
-  va_start(Argptr, Format);
-  vfprintf(stderr, Format, Argptr);
-  va_end(Argptr);
+  va_list ArgPtr;
+  va_start(ArgPtr, Format);
+  vfprintf(stderr, Format, ArgPtr);
+  va_end(ArgPtr);
 }
 void SerializableConsumer::LogError(const clang::Decl *Decl, const char *format,
                                     ...) {
@@ -68,6 +71,17 @@ SerializableConsumer::SerializableConsumer(
     : Visitor(*this), Context(&Compiler.getASTContext()), InFile(InFile),
       Diags(Compiler.getDiagnostics()), ChangedDatabase(ChangedDatabase),
       OutDir(OutDir) {
+  std::string Relative;
+  for (auto Entry : Compiler.getHeaderSearchOpts().UserEntries) {
+    Relative = relative(Entry.Path, InFile);
+    if (!Relative.empty()) {
+      RelativePath = std::move(Relative);
+      break;
+    }
+  }
+  if (RelativePath.empty()) {
+    RelativePath = InFile;
+  }
 
   // check if input file is header
   llvm::StringRef PathExt = llvm::sys::path::extension(InFile);
@@ -78,12 +92,12 @@ SerializableConsumer::SerializableConsumer(
   llvm::SmallString<128> Buffer(InFile);
 
   // get correspond database
-  llvm::sys::path::replace_extension(Buffer, "mes11n.db");
+  llvm::sys::path::replace_extension(Buffer, DATABASE_POSTFIX);
   DatabaseFile = Buffer.str().str();
 
   // get correspond mes11n.obj
   Buffer.assign(InFile);
-  llvm::sys::path::replace_extension(Buffer, "mes11n.obj");
+  llvm::sys::path::replace_extension(Buffer, OBJECT_POSTFIX);
   // replace '/' or '\' in a the path to '_' for the object file
   for (char &C : Buffer) {
     if (C == '/' || C == '\\') {

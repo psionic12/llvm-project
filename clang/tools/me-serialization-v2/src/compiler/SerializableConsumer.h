@@ -1,8 +1,8 @@
 #ifndef LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_SERIALIZABLE_GENERATOR_H_
 #define LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_SERIALIZABLE_GENERATOR_H_
-#include "CodeGenerator.h"
-#include "RecordDatabase.h"
-#include "RecordInfo.h"
+#include "../common/RecordDatabase.h"
+#include "../common/RecordInfo.h"
+#include "common/CodeGenerator.h"
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Frontend/CompilerInstance.h"
@@ -35,7 +35,7 @@ public:
     // God damn I want to use try_emplace.
     const auto &Result = Cache.find(Decl);
     if (Result == Cache.end()) {
-      return Cache.emplace(Decl, RecordInfo(this, Decl, InFile)).first->second;
+      return Cache.emplace(Decl, RecordInfo(this, Decl)).first->second;
     } else {
       return Result->second;
     }
@@ -50,6 +50,7 @@ private:
   clang::ASTContext *Context;
   bool HasErrors = false;
   clang::StringRef InFile;
+  std::string RelativePath;
   std::string DatabaseFile;
   std::string ObjFile;
   clang::DiagnosticsEngine &Diags;

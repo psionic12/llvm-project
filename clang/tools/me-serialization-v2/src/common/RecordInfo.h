@@ -1,6 +1,7 @@
 #ifndef LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_RECORD_INFO_H_
 #define LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_RECORD_INFO_H_
 #include "clang/AST/Type.h"
+#include <me/s11n/field_coder.h>
 #include <unordered_map>
 class SerializableConsumer;
 enum EntryKind {
@@ -27,12 +28,10 @@ enum RepeatedKind {
 
 class EntryInfo {
 public:
+  EntryInfo() = default;
   EntryInfo(SerializableConsumer *Consumer, const clang::Type *Type,
             const clang::NamedDecl *NamedDecl);
-  void addCategory(clang::StringRef category) {
-    Categories.emplace_back(category);
-  }
-  void setID(uint32_t ID) { this->RecordID = ID; }
+  void setID(uint32_t ID) { this->EntryID = ID; }
   clang::StringRef entryName() const { return EntryName; }
   // called when this record appears in database.
   void setNotNew() { IsNew = false; }
@@ -41,19 +40,21 @@ public:
 
 private:
   friend class RecordInfo;
+  template <typename T, typename Enable> friend struct me::s11n::TypeCoder;
   SerializableConsumer *Consumer;
+  // 0
   std::string EntryName;
-  std::vector<std::string> Categories;
-  uint32_t RecordID = 0;
+  // 1
+  uint32_t EntryID = 0;
+  // 2
   bool IsNew = true;
 };
 
 class RecordInfo {
 public:
-  RecordInfo(const uint8_t *Ptr);
+  RecordInfo() = default;
   RecordInfo(SerializableConsumer *Consumer,
-             const clang::CXXRecordDecl *RecordDecl,
-             clang::StringRef IncludeFile);
+             const clang::CXXRecordDecl *RecordDecl);
   void parseFields();
   bool isSerializable() const { return Serializable; }
   bool pure() const { return Pure; }
@@ -72,12 +73,10 @@ public:
   const std::unordered_map<std::string, EntryInfo> &entries() const {
     return Entries;
   }
-  clang::StringRef includeFile() const {
-    return IncludeFile;
-  }
   std::string toObj() const;
 
 private:
+  template <typename T, typename Enable> friend struct me::s11n::TypeCoder;
   SerializableConsumer *Consumer;
   bool Serializable = false;
   bool Pure = false;
@@ -94,7 +93,5 @@ private:
   bool Polymorphic = false;
   // 5
   bool IsNew = true;
-  // 6
-  std::string IncludeFile;
 };
 #endif // LLVM_CLANG_TOOLS_ME_SERIALIZATION_V2_RECORD_INFO_H_
