@@ -3444,10 +3444,3 @@ def ReleaseHandle : InheritableParamAttr {
   let Subjects = SubjectList<[ParmVar]>;
   let Documentation = [ReleaseHandleDocs];
 }
-
-def MESerialized : InheritableParamAttr {
-  let Spellings = [CXX11<"me", "serialized">, C2x<"me", "serialized">];
-  let Args = [VariadicStringArgument<"Categories">];
-  let Subjects = SubjectList<[Field, CXXMethod]>;
-  let Documentation = [Undocumented];
-}
